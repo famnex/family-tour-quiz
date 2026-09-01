@@ -150,7 +150,7 @@ class AdminController {
         e.preventDefault();
         const password = adminPwInput.value.trim();
         try {
-          const res = await fetch('/api/admin/auth', {
+          const res = await fetch(window.apiUrl('/api/admin/auth'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password, userId: window.app?.user?.id })
@@ -417,7 +417,7 @@ class AdminController {
     reader.onload = async (e) => {
       const filedata = e.target.result;
       try {
-        const res = await fetch('/api/admin/upload', {
+        const res = await fetch(window.apiUrl('/api/admin/upload'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ filename: file.name, filedata })
@@ -447,7 +447,7 @@ class AdminController {
 
   async sendMediaControl(action) {
     try {
-      await fetch('/api/admin/media-control', {
+      await fetch(window.apiUrl('/api/admin/media-control'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action })
@@ -849,7 +849,7 @@ class AdminController {
 
   async deletePlayer(id) {
     try {
-      const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+      const res = await fetch(window.apiUrl(`/api/admin/users/${id}`), { method: 'DELETE' });
       if (!res.ok) {
         alert('Fehler beim Entfernen des Teilnehmers');
       }
@@ -861,7 +861,7 @@ class AdminController {
 
   async loadSlides() {
     try {
-      const res = await fetch('/api/slides');
+      const res = await fetch(window.apiUrl('/api/slides'));
       this.allSlides = await res.json();
       this.renderSlideSelect();
       this.renderStudioList();
@@ -933,7 +933,7 @@ class AdminController {
 
   async setSlide(slideId) {
     try {
-      await fetch('/api/admin/set-slide', {
+      await fetch(window.apiUrl('/api/admin/set-slide'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slide_id: slideId })
@@ -1004,7 +1004,7 @@ class AdminController {
     }
 
     try {
-      await fetch('/api/admin/set-phase', {
+      await fetch(window.apiUrl('/api/admin/set-phase'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phase: targetPhase })
@@ -1016,7 +1016,7 @@ class AdminController {
 
   async startTimer(duration) {
     try {
-      await fetch('/api/admin/timer/start', {
+      await fetch(window.apiUrl('/api/admin/timer/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ duration })
@@ -1028,7 +1028,7 @@ class AdminController {
 
   async stopTimer() {
     try {
-      await fetch('/api/admin/timer/stop', { method: 'POST' });
+      await fetch(window.apiUrl('/api/admin/timer/stop'), { method: 'POST' });
     } catch (e) {
       console.error(e);
     }
@@ -1036,7 +1036,7 @@ class AdminController {
 
   async sendAnnouncement(message) {
     try {
-      await fetch('/api/admin/announcement', {
+      await fetch(window.apiUrl('/api/admin/announcement'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message })
@@ -1048,7 +1048,7 @@ class AdminController {
 
   async clearAnnouncement() {
     try {
-      await fetch('/api/admin/clear-announcement', { method: 'POST' });
+      await fetch(window.apiUrl('/api/admin/clear-announcement'), { method: 'POST' });
     } catch (e) {
       console.error(e);
     }
@@ -1056,7 +1056,7 @@ class AdminController {
 
   async resetTour() {
     try {
-      await fetch('/api/admin/reset-rallye', { method: 'POST' });
+      await fetch(window.apiUrl('/api/admin/reset-rallye'), { method: 'POST' });
     } catch (e) {
       console.error(e);
     }
@@ -1064,7 +1064,7 @@ class AdminController {
 
   async seedSampleTour() {
     try {
-      await fetch('/api/admin/seed-sample', { method: 'POST' });
+      await fetch(window.apiUrl('/api/admin/seed-sample'), { method: 'POST' });
       await this.loadSlides();
     } catch (e) {
       console.error(e);
@@ -1081,7 +1081,7 @@ class AdminController {
 
     const newOrder = copy.map(s => s.id);
     try {
-      await fetch('/api/admin/slides/reorder', {
+      await fetch(window.apiUrl('/api/admin/slides/reorder'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order: newOrder })
@@ -1095,7 +1095,7 @@ class AdminController {
   async deleteSlide(id) {
     if (!confirm('Diese Folie wirklich löschen?')) return;
     try {
-      await fetch(`/api/admin/slides/${id}`, { method: 'DELETE' });
+      await fetch(window.apiUrl(`/api/admin/slides/${id}`), { method: 'DELETE' });
       this.editingSlideId = null;
       await this.loadSlides();
     } catch (e) {
@@ -1290,13 +1290,13 @@ class AdminController {
     try {
       let savedSlideId = slideId;
       if (slideId) {
-        await fetch(`/api/admin/slides/${slideId}`, {
+        await fetch(window.apiUrl(`/api/admin/slides/${slideId}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password: 'casaxx', ...payload })
         });
       } else {
-        const res = await fetch('/api/admin/slides', {
+        const res = await fetch(window.apiUrl('/api/admin/slides'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ password: 'casaxx', ...payload })

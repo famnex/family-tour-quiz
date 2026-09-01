@@ -155,7 +155,7 @@ class RallyeApp {
         if (savedToken) headers['Authorization'] = `Bearer ${savedToken}`;
         if (savedName) headers['x-user-name'] = encodeURIComponent(savedName);
 
-        const res = await fetch('/api/auth/me', { headers });
+        const res = await fetch(window.apiUrl('/api/auth/me'), { headers });
         if (res.ok) {
           const data = await res.json();
           this.user = data.user;
@@ -165,7 +165,7 @@ class RallyeApp {
           return;
         } else if (savedName) {
           // Auto-re-register if user was deleted or DB was re-seeded
-          const reLogin = await fetch('/api/auth/login', {
+          const reLogin = await fetch(window.apiUrl('/api/auth/login'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -201,7 +201,7 @@ class RallyeApp {
     if (!name) return;
 
     try {
-      const res = await fetch('/api/auth/login', {
+      const res = await fetch(window.apiUrl('/api/auth/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -262,7 +262,8 @@ class RallyeApp {
 
   connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
+    const basePath = window.APP_BASE || (window.location.pathname.startsWith('/family') ? '/family' : '');
+    const wsUrl = `${protocol}//${window.location.host}${basePath}/ws`;
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -796,7 +797,7 @@ class RallyeApp {
 
   async submitMultipleChoice(slideId, optionIndex, text) {
     try {
-      const res = await fetch('/api/submissions', {
+      const res = await fetch(window.apiUrl('/api/submissions'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -822,7 +823,7 @@ class RallyeApp {
   async submitEstimation(slideId, numberVal, isBackground = false) {
     if (isNaN(numberVal)) return;
     try {
-      const res = await fetch('/api/submissions', {
+      const res = await fetch(window.apiUrl('/api/submissions'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

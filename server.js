@@ -13,21 +13,52 @@ const { seedDatabase } = require('./src/seed');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({ noServer: true });
 
-const PORT = process.env.PORT || 3000;
+// Handle WebSocket Upgrade for both /ws and /family/ws (subpath proxy support)
+server.on('upgrade', (request, socket, head) => {
+  try {
+    const pathname = new URL(request.url, `http://${request.headers.host || 'localhost'}`).pathname;
+    if (pathname === '/ws' || pathname === '/family/ws' || pathname.endsWith('/ws')) {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  } catch (err) {
+    socket.destroy();
+  }
+});
+
+const PORT = process.env.PORT || 5500;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public'), {
+
+// Subpath URL Rewriting (support https://cloud.mso-hef.de/family)
+app.use((req, res, next) => {
+  if (req.url === '/family') {
+    return res.redirect(301, '/family/');
+  }
+  if (req.url.startsWith('/family/')) {
+    req.url = req.url.slice(7) || '/';
+  }
+  next();
+});
+
+const staticMiddleware = express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.html') || filePath.endsWith('.css') || filePath.endsWith('.js') || filePath.endsWith('.json')) {
       res.setHeader('Cache-Control', 'no-cache, must-revalidate');
     }
   }
-}));
+});
+
+app.use(staticMiddleware);
+app.use('/family', staticMiddleware);
 
 // Store active WebSocket client connections
 const wsClients = new Map(); // ws -> { userId, role }
