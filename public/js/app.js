@@ -483,6 +483,10 @@ class RallyeApp {
       if (mediaContainer) mediaContainer.classList.add('hidden');
       return;
     }
+
+    const isNewSlide = this.currentSlideId !== slide.id;
+    this.currentSlideId = slide.id;
+
     if (slide.type === 'transit') {
       badge.textContent = `🚶 Unterwegs (${index + 1}/${total})`;
       if (footerStation) footerStation.textContent = `🚶 Unterwegs (${index + 1}/${total})`;
@@ -513,52 +517,52 @@ class RallyeApp {
     }
 
     // Media Rendering (Image, Video, Audio, Image + Audio)
-    const mediaContainer = document.getElementById('slide-media-container');
+    if (mediaContainer) {
+      if (isNewSlide || !mediaContainer.dataset.renderedSlideId || mediaContainer.dataset.renderedSlideId !== slide.id) {
+        mediaContainer.dataset.renderedSlideId = slide.id;
+        mediaContainer.innerHTML = '';
 
-    if (isNewSlide || !mediaContainer.dataset.renderedSlideId || mediaContainer.dataset.renderedSlideId !== slide.id) {
-      mediaContainer.dataset.renderedSlideId = slide.id;
-      mediaContainer.innerHTML = '';
+        const mediaType = slide.media_type || 'image';
+        const hasMedia = !!(slide.media_url || slide.audio_url);
 
-      const mediaType = slide.media_type || 'image';
-      const hasMedia = !!(slide.media_url || slide.audio_url);
-
-      if (!hasMedia) {
-        mediaContainer.classList.add('hidden');
-      } else {
-        mediaContainer.classList.remove('hidden');
-
-        if (mediaType === 'video') {
-          mediaContainer.innerHTML = `
-            <video id="active-media-player" src="${slide.media_url}" controls playsinline style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);"></video>
-          `;
-        } else if (mediaType === 'audio') {
-          mediaContainer.innerHTML = `
-            <div style="padding: 12px; text-align: center; background: #0f172a; border-radius: var(--radius-md);">
-              <div style="font-size: 1.8rem; margin-bottom: 4px;">🎵</div>
-              <p style="font-weight: 800; color: #38bdf8; font-size: 0.85rem; margin-bottom: 6px;">Audio-Guide</p>
-              <audio id="active-media-player" src="${slide.media_url}" controls style="width: 100%; height: 32px;"></audio>
-            </div>
-          `;
-        } else if (mediaType === 'image_and_audio') {
-          mediaContainer.innerHTML = `
-            <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
-              <div style="position: relative; height: 85px; width: 100%; cursor: pointer;" onclick="window.app.openImageLightbox('${slide.media_url}')">
-                <img src="${slide.media_url}" alt="Station Bild" loading="lazy" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);">
-                <div class="media-zoom-badge">🔍 Bild vergrößern</div>
-              </div>
-              <div style="background: rgba(15, 23, 42, 0.9); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid rgba(56, 189, 248, 0.3);">
-                <small style="color: #38bdf8; font-weight: 800; display: block; margin-bottom: 2px;">🎵 Audio-Begleitung</small>
-                <audio id="active-media-player" src="${slide.audio_url || slide.media_url}" controls style="width: 100%; height: 28px;"></audio>
-              </div>
-            </div>
-          `;
+        if (!hasMedia) {
+          mediaContainer.classList.add('hidden');
         } else {
-          // Default Image - Compact Thumbnail with Zoom Click
-          mediaContainer.innerHTML = `
-            <img id="slide-media-img" src="${slide.media_url}" alt="Station Media" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">
-            <div class="media-zoom-badge">🔍 Bild vergrößern</div>
-          `;
-          mediaContainer.onclick = () => this.openImageLightbox(slide.media_url);
+          mediaContainer.classList.remove('hidden');
+
+          if (mediaType === 'video') {
+            mediaContainer.innerHTML = `
+              <video id="active-media-player" src="${slide.media_url}" controls playsinline style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);"></video>
+            `;
+          } else if (mediaType === 'audio') {
+            mediaContainer.innerHTML = `
+              <div style="padding: 12px; text-align: center; background: #0f172a; border-radius: var(--radius-md);">
+                <div style="font-size: 1.8rem; margin-bottom: 4px;">🎵</div>
+                <p style="font-weight: 800; color: #38bdf8; font-size: 0.85rem; margin-bottom: 6px;">Audio-Guide</p>
+                <audio id="active-media-player" src="${slide.media_url}" controls style="width: 100%; height: 32px;"></audio>
+              </div>
+            `;
+          } else if (mediaType === 'image_and_audio') {
+            mediaContainer.innerHTML = `
+              <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+                <div style="position: relative; height: 85px; width: 100%; cursor: pointer;" onclick="window.app.openImageLightbox('${slide.media_url}')">
+                  <img src="${slide.media_url}" alt="Station Bild" loading="lazy" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);">
+                  <div class="media-zoom-badge">🔍 Bild vergrößern</div>
+                </div>
+                <div style="background: rgba(15, 23, 42, 0.9); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid rgba(56, 189, 248, 0.3);">
+                  <small style="color: #38bdf8; font-weight: 800; display: block; margin-bottom: 2px;">🎵 Audio-Begleitung</small>
+                  <audio id="active-media-player" src="${slide.audio_url || slide.media_url}" controls style="width: 100%; height: 28px;"></audio>
+                </div>
+              </div>
+            `;
+          } else {
+            // Default Image - Compact Thumbnail with Zoom Click
+            mediaContainer.innerHTML = `
+              <img id="slide-media-img" src="${slide.media_url}" alt="Station Media" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">
+              <div class="media-zoom-badge">🔍 Bild vergrößern</div>
+            `;
+            mediaContainer.onclick = () => this.openImageLightbox(slide.media_url);
+          }
         }
       }
     }
