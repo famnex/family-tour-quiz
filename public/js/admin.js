@@ -19,9 +19,13 @@ class AdminController {
     this.cachedRouteGeoJson = { query: '', coords: [], distance: 0, duration: 0 };
     this.routeMapHasInitialFit = false;
     this.lastRenderedCoordsKey = null;
+    this.isInitialized = false;
+    this.isSaving = false;
   }
 
   async init() {
+    if (this.isInitialized) return;
+    this.isInitialized = true;
     this.bindEvents();
     await this.loadSlides();
     await this.fetchLiveState();
@@ -1338,6 +1342,16 @@ class AdminController {
   }
 
   async saveSlide() {
+    if (this.isSaving) return;
+    this.isSaving = true;
+
+    const submitBtn = document.querySelector('#studio-slide-form button[type="submit"]');
+    const originalBtnHtml = submitBtn ? submitBtn.innerHTML : '💾 Folie speichern';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '💾 Speichere...';
+    }
+
     const slideId = document.getElementById('edit-slide-id').value;
     const type = document.getElementById('edit-slide-type').value;
     const title = document.getElementById('edit-slide-title').value.trim();
@@ -1408,6 +1422,12 @@ class AdminController {
     } catch (e) {
       console.error(e);
       alert('Fehler beim Speichern der Folie');
+    } finally {
+      this.isSaving = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnHtml;
+      }
     }
   }
 
