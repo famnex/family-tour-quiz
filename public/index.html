@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#6366f1">
+  <meta name="description" content="Familienausflug-Rallye Companion App – Live-synchronisierte Stadtrallye und Quiz für die ganze Familie">
+  <title>Familienausflug-Rallye</title>
+  
+  <link rel="manifest" href="/manifest.json?v=1.5.1">
+  <link rel="stylesheet" href="/css/style.css?v=1.5.1">
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+</head>
+<body>
+
+  <div id="app">
+    <!-- Push Announcement Banner (Eilmeldung) -->
+    <div id="announcement-banner" class="announcement-bar hidden">
+      <div class="pulse-dot"></div>
+      <span style="flex: 1;" id="announcement-text">Eilmeldung aktiv!</span>
+    </div>
+
+    <!-- App Header -->
+    <header>
+      <div class="header-inner">
+        <div class="user-profile-badge" id="user-profile-btn" title="Klicken zum Abmelden / Profil ändern">
+          <span id="connection-status-dot" class="connection-dot" title="Live verbunden"></span>
+          <div id="user-avatar-circle" class="avatar-circle" style="background-color: #4f46e5;">🌟</div>
+          <span id="user-display-name" class="user-name">Gast</span>
+        </div>
+
+        <div class="header-controls">
+          <button id="sound-toggle-btn" class="icon-btn" title="Ton ein/aus">🔊</button>
+          <button id="admin-toggle-btn" class="icon-btn" title="Admin-Bereich (Passwort)">👑 Admin</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+      <!-- UNIFIED SLIDE STAGE CARD -->
+      <div class="slide-stage-card" id="slide-stage-card">
+        
+        <!-- Header Meta Row -->
+        <div class="stage-header-row">
+          <span id="slide-badge" class="badge badge-info">Station 1 von 8</span>
+          <div style="display: flex; gap: 8px;">
+            <span id="slide-meeting-tag" class="slide-location hidden">⏰ Treffpunkt: 14:00</span>
+          </div>
+        </div>
+
+        <!-- Stage Grid -->
+        <div class="stage-grid" id="stage-grid">
+          
+          <!-- Media & Station Column -->
+          <div class="stage-media-col" id="stage-media-col">
+            <h1 id="slide-title" class="slide-title">Lade Rallye-Inhalte...</h1>
+
+            <div id="slide-location-tag" class="slide-location hidden">📍 Marktplatz</div>
+
+            <div id="slide-media-container" class="slide-media-box hidden" title="Tippen zum Vergrößern">
+              <img id="slide-media-img" src="" alt="Station Media" loading="lazy">
+              <div class="media-zoom-badge">🔍 Tippen zum Vergrößern</div>
+            </div>
+
+            <p id="slide-description" class="slide-description">Verbinde mit dem Server...</p>
+
+            <!-- Participant Mini-Map & Navigation (For Info & Transit Slides with Coordinates) -->
+            <div id="slide-map-box" class="hidden" style="margin-top: 10px; background: #090d16; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <label style="font-size: 0.8rem; font-weight: 800; color: #38bdf8;">📍 Zielort auf der Karte</label>
+                <span id="slide-map-distance-badge" class="badge badge-transit" style="font-size: 0.7rem; padding: 3px 8px;">Zielstation</span>
+              </div>
+              <div id="slide-mini-map" style="height: 160px; width: 100%; border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.1); z-index: 1;"></div>
+              <div style="margin-top: 8px;">
+                <a id="slide-nav-btn" href="#" target="_blank" rel="noopener noreferrer" class="submit-btn" style="padding: 10px; font-size: 0.9rem; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  🧭 Navigation starten (Google Maps)
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quiz Column (Wird bei Info-Folien komplett ausgeblendet) -->
+          <div class="stage-quiz-col hidden" id="stage-quiz-col">
+            <div class="question-box" id="question-text">
+              Quizfrage wird geladen...
+            </div>
+
+            <!-- Timer Display (Phase 3) -->
+            <div class="timer-container hidden" id="timer-container">
+              <div class="timer-badge" id="timer-badge">⏱️ 20s</div>
+              <div class="timer-progress-bar">
+                <div class="timer-progress-fill" id="timer-progress-fill"></div>
+              </div>
+            </div>
+
+            <!-- Lock Notice (Phase 1 & 2) -->
+            <div class="lock-notice hidden" id="quiz-lock-notice">
+              🔒 <strong>Frage aktiv!</strong><br>Admin blendet in Kürze die Antwortmöglichkeiten ein.
+            </div>
+
+            <!-- Multiple Choice Options Grid -->
+            <div class="options-grid hidden" id="options-grid"></div>
+
+            <!-- Estimation Numeric Input Container -->
+            <div class="estimation-container hidden" id="estimation-container"></div>
+
+            <!-- Phase 4 Result Card -->
+            <div class="result-banner hidden" id="result-banner"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Leaderboard Section (Phase 5 / Endauswertung) -->
+      <div class="leaderboard-card hidden" id="leaderboard-section">
+        <div class="leaderboard-title" id="leaderboard-header-title">
+          <span>🏆</span> Große Endauswertung & Siegerehrung
+        </div>
+        <div class="ranking-list" id="ranking-list"></div>
+      </div>
+    </main>
+
+    <!-- App Footer with Odometer Score Display -->
+    <footer class="app-footer">
+      <div class="footer-inner">
+        <div class="footer-score-wrapper">
+          <span class="footer-score-label">🏆 Punkte</span>
+          <div id="odometer-container"></div>
+        </div>
+        <div id="footer-station-indicator" class="footer-station-badge">
+          📍 Station 1
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- EXCLUSIVE TOP 3 WINNER TROPHY MODAL OVERLAY -->
+  <div id="winner-trophy-modal" class="modal-overlay hidden" style="z-index: 10000; backdrop-filter: blur(14px); background: rgba(7, 10, 18, 0.94); padding: 16px;">
+    <div class="modal-content winner-modal-box">
+      <div id="winner-trophy-3d-container"></div>
+      <h2 id="winner-modal-headline" class="winner-headline">👑 HERZLICHEN GLÜCKWUNSCH! 👑</h2>
+      <p id="winner-modal-subtext" class="winner-subtext">Du bist der Gesamtsieger unserer Familien-Rallye!</p>
+      <div id="winner-modal-score" class="winner-score-badge">🏆 1. Platz • 550</div>
+      <button type="button" id="close-winner-trophy-btn" class="submit-btn winner-modal-btn">🎉 Wow, spitze!</button>
+    </div>
+  </div>
+
+  <!-- IMAGE LIGHTBOX / FULLSCREEN MODAL -->
+  <div id="image-lightbox-modal" class="modal-overlay hidden" style="z-index: 99999; backdrop-filter: blur(8px); background: rgba(0, 0, 0, 0.88); padding: 14px;">
+    <div style="position: relative; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+      <button type="button" id="close-lightbox-btn" class="icon-btn" style="position: absolute; top: -12px; right: -12px; z-index: 10; background: #ef4444; border-radius: 50%; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.5);">✕</button>
+      <img id="lightbox-full-img" src="" alt="Vergrößertes Stations-Bild" style="max-width: 95vw; max-height: 82vh; object-fit: contain; border-radius: var(--radius-md); box-shadow: 0 10px 35px rgba(0,0,0,0.9);">
+      <small style="color: #94a3b8; margin-top: 8px; font-weight: 700; font-size: 0.85rem;">Tippe irgendwo zum Schließen</small>
+    </div>
+  </div>
+
+  <!-- AUTH / REGISTRATION MODAL (No Password) -->
+  <div id="auth-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <h2 class="modal-title" style="font-size: 1.5rem; font-weight: 900; text-align: center;">🧭 Willkommen zur Rallye!</h2>
+      <p style="text-align: center; color: var(--text-muted); font-size: 0.95rem;">
+        Gib deinen Vornamen ein, um live mit deiner Familie mitzuspielen!
+      </p>
+
+      <form id="auth-form" style="display: flex; flex-direction: column; gap: 16px;">
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Dein Vorname</label>
+          <input type="text" id="login-name" class="input-field" placeholder="z. B. Papa, Jonas, Mama, Lea" required maxlength="20" autofocus autocomplete="given-name">
+        </div>
+
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Wähle dein Avatar-Emoji</label>
+          <div class="avatar-selection-row" style="display: flex; gap: 10px; overflow-x: auto; padding: 12px 6px; align-items: center;">
+            <div class="emoji-choice selected" data-emoji="🌟">🌟</div>
+            <div class="emoji-choice" data-emoji="🚀">🚀</div>
+            <div class="emoji-choice" data-emoji="👑">👑</div>
+            <div class="emoji-choice" data-emoji="🦁">🦁</div>
+            <div class="emoji-choice" data-emoji="🦄">🦄</div>
+            <div class="emoji-choice" data-emoji="🦊">🦊</div>
+            <div class="emoji-choice" data-emoji="🧭">🧭</div>
+            <div class="emoji-choice" data-emoji="🍕">🍕</div>
+          </div>
+        </div>
+
+        <div>
+          <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Wähle deine Farbe</label>
+          <div class="avatar-selection-row" style="display: flex; gap: 10px; overflow-x: auto; padding: 12px 6px; align-items: center;">
+            <div class="color-choice selected" data-color="#4f46e5" style="background: #4f46e5;"></div>
+            <div class="color-choice" data-color="#ec4899" style="background: #ec4899;"></div>
+            <div class="color-choice" data-color="#10b981" style="background: #10b981;"></div>
+            <div class="color-choice" data-color="#f59e0b" style="background: #f59e0b;"></div>
+            <div class="color-choice" data-color="#3b82f6" style="background: #3b82f6;"></div>
+            <div class="color-choice" data-color="#8b5cf6" style="background: #8b5cf6;"></div>
+            <div class="color-choice" data-color="#ef4444" style="background: #ef4444;"></div>
+          </div>
+        </div>
+
+        <button type="submit" class="submit-btn" style="margin-top: 8px;">
+          🚀 Los geht's!
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ADMIN PASSWORD PROMPT MODAL -->
+  <div id="admin-password-modal" class="modal-overlay hidden" style="z-index: 2500;">
+    <div class="modal-content" style="max-width: 420px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <h3 style="font-size: 1.35rem; font-weight: 900;">🔒 Admin-Zugang</h3>
+        <button id="close-admin-pw-btn" class="icon-btn" style="padding: 6px 12px;">✕</button>
+      </div>
+      <p style="color: var(--text-muted); font-size: 0.95rem;">
+        Bitte gib das Admin-Passwort ein, um die Steuerung & den Designer zu öffnen:
+      </p>
+
+      <form id="admin-password-form" style="display: flex; flex-direction: column; gap: 14px;">
+        <input type="password" id="admin-pw-input" class="input-field" placeholder="Admin-Passwort eingeben" required autofocus autocomplete="current-password">
+        <div id="admin-pw-error" style="color: #ef4444; font-size: 0.9rem; font-weight: 800; background: rgba(239, 68, 68, 0.15); padding: 8px 12px; border-radius: var(--radius-sm);" class="hidden">
+          ❌ Falsches Admin-Passwort!
+        </div>
+        <button type="submit" class="submit-btn">
+          🔓 Admin-Zentrale freischalten
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- DEDICATED FULLSCREEN ADMIN STUDIO WORKSPACE -->
+  <div id="admin-modal" class="admin-fullscreen-view hidden">
+    
+    <!-- Admin Top Header Bar -->
+    <div class="admin-header-bar">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <h2 style="font-size: 1.25rem; font-weight: 900; color: white;">👑 Admin</h2>
+        <span id="admin-active-slide-badge" class="badge badge-info" style="font-size: 0.75rem; padding: 3px 8px;">Folie 1</span>
+      </div>
+
+      <!-- Desktop Navigation Tabs -->
+      <div class="admin-nav-tabs" id="admin-desktop-tabs">
+        <button id="tab-controller-btn" class="admin-tab-btn active">📱 Live-Steuerung</button>
+        <button id="tab-studio-btn" class="admin-tab-btn">🎨 Slide Studio</button>
+        <button id="tab-route-btn" class="admin-tab-btn">🗺️ Tour-Route</button>
+      </div>
+
+      <!-- Desktop Action Buttons -->
+      <div class="admin-header-actions" id="admin-desktop-actions">
+        <button id="admin-lock-btn" class="btn-secondary" style="padding: 6px 14px; font-size: 0.85rem;" title="Sitzung sperren">🔒 Sperren</button>
+        <button id="close-admin-btn" class="icon-btn" style="padding: 6px 14px; font-size: 0.85rem;">🚪 Beenden</button>
+      </div>
+
+      <!-- Mobile Burger Menu Toggle Button -->
+      <button id="admin-burger-btn" class="admin-burger-btn" type="button" aria-label="Admin Menü öffnen">
+        <span>☰ Menü</span>
+      </button>
+    </div>
+
+    <!-- Mobile Navigation Drawer / Dropdown -->
+    <div id="admin-mobile-drawer" class="admin-mobile-drawer hidden">
+      <div class="admin-mobile-drawer-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 12px;">
+          <strong style="color: white; font-size: 1rem;">👑 Admin-Navigation</strong>
+          <button type="button" id="close-admin-mobile-drawer-btn" class="icon-btn" style="padding: 4px 10px; font-size: 1.1rem;">✕</button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button id="mobile-tab-controller-btn" class="mobile-drawer-item active">📱 Live-Steuerung</button>
+          <button id="mobile-tab-studio-btn" class="mobile-drawer-item">🎨 Slide Studio (Designer)</button>
+          <button id="mobile-tab-route-btn" class="mobile-drawer-item">🗺️ Tour-Route</button>
+        </div>
+        <div style="display: flex; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
+          <button id="mobile-admin-lock-btn" class="btn-secondary" style="flex: 1; padding: 10px; font-size: 0.85rem;">🔒 Sperren</button>
+          <button id="mobile-close-admin-btn" class="icon-btn" style="flex: 1; padding: 10px; font-size: 0.85rem;">🚪 Beenden</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Workspace Body -->
+    <div class="admin-workspace-body">
+
+      <!-- TAB 1: LIVE CONTROLLER -->
+      <div id="admin-live-view" class="live-controller-grid">
+        
+        <!-- Left Column: Phase & Slide Stepper & Live Preview -->
+        <div class="admin-card">
+          <!-- 5 Large Numbered Phase Buttons (Only for Quiz Slides) -->
+          <div id="admin-quiz-phase-card">
+            <div class="admin-card-title" style="margin-bottom: 12px;">
+              <span>🎯 Quiz-Phase freischalten</span>
+              <span id="admin-submission-stats" class="badge badge-multiple_choice">0 abgegeben</span>
+            </div>
+
+            <div class="phase-stepper-large">
+              <button class="phase-step-btn-large active" data-phase="1">
+                <span class="phase-num">1</span>
+                <span class="phase-name">Frage & Medien</span>
+              </button>
+              <button class="phase-step-btn-large" data-phase="2">
+                <span class="phase-num">2</span>
+                <span class="phase-name">Optionen</span>
+              </button>
+              <button class="phase-step-btn-large" data-phase="3">
+                <span class="phase-num">3</span>
+                <span class="phase-name">Timer & Vote</span>
+              </button>
+              <button class="phase-step-btn-large" data-phase="4">
+                <span class="phase-num">4</span>
+                <span class="phase-name">Auflösen</span>
+              </button>
+              <button class="phase-step-btn-large" data-phase="5">
+                <span class="phase-num">5</span>
+                <span class="phase-name">Ranking</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Admin Live Content & Phase Preview (Visible on ALL slides: Info, Transit & Quiz) -->
+          <div id="admin-live-preview-box" style="background: #090d16; padding: 16px; border-radius: var(--radius-md); border: 1px solid rgba(99, 102, 241, 0.35); margin-top: 14px;">
+            <div id="admin-preview-phase-label" style="font-size: 0.8rem; font-weight: 800; color: #818cf8; text-transform: uppercase; margin-bottom: 6px;">Station aktiv</div>
+            
+            <h4 id="admin-preview-title" style="font-size: 1.15rem; font-weight: 900; color: #fff; margin-bottom: 6px;"></h4>
+            <div id="admin-preview-desc" style="font-size: 0.95rem; color: #cbd5e1; line-height: 1.45; margin-bottom: 8px; white-space: pre-line;"></div>
+            
+            <div id="admin-preview-meta" style="font-size: 0.85rem; color: #38bdf8; font-weight: 700; margin-bottom: 8px;" class="hidden"></div>
+            <div id="admin-preview-media" class="hidden" style="max-height: 140px; overflow: hidden; border-radius: var(--radius-sm); margin-bottom: 8px;"></div>
+            
+            <div id="admin-preview-question" class="hidden" style="font-size: 1.1rem; font-weight: 900; color: #fbbf24; margin-top: 8px; margin-bottom: 6px;"></div>
+            <div id="admin-preview-options" class="hidden" style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px;"></div>
+            
+            <!-- Integrated Phase 3 Timer Control -->
+            <div id="admin-phase3-timer-box" class="hidden" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: space-between; gap: 12px;">
+              <div style="font-size: 1.25rem; font-weight: 900; color: #fbbf24;" id="admin-integrated-timer-display">⏱️ Countdown läuft...</div>
+              <button id="admin-stop-timer-btn" class="btn-danger" style="padding: 8px 14px; font-size: 0.85rem;">⏹ Timer stoppen</button>
+            </div>
+
+            <!-- Admin Private Memory Notes / Gedächtnisstütze -->
+            <div id="admin-preview-notes-box" class="hidden" style="margin-top: 12px; padding: 10px 12px; background: rgba(245, 158, 11, 0.12); border-left: 3px solid #f59e0b; border-radius: 4px;">
+              <div style="font-size: 0.8rem; font-weight: 800; color: #fbbf24; text-transform: uppercase; margin-bottom: 4px;">💡 Deine Gedächtnisstütze (nur für dich sichtbar):</div>
+              <div id="admin-preview-notes-text" style="font-size: 0.9rem; color: #fef3c7; line-height: 1.4; white-space: pre-line;"></div>
+            </div>
+          </div>
+
+          <!-- Slide Selector -->
+          <div style="margin-top: 14px;">
+            <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted);">Aktive Station / Folie wählen</label>
+            <select id="admin-slide-select" class="input-field" style="margin-top: 6px;"></select>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+              <button id="admin-prev-slide" class="btn-secondary" style="flex: 1;">◀ Vorherige Folie</button>
+              <button id="admin-next-slide" class="btn-secondary" style="flex: 1;">Nächste Folie ▶</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Media, Announcements & Live Status -->
+        <div class="admin-card">
+          <!-- Timer Controls (Strictly using Question's configured duration) -->
+          <div id="admin-timer-card" class="hidden" style="background: #090d16; padding: 16px; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.08);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+              <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted);">Station Countdown</label>
+              <span id="admin-slide-countdown-info" style="font-size: 0.9rem; font-weight: 900; color: #fbbf24;">⏱️ 20s</span>
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <button id="admin-start-timer-btn" class="submit-btn" style="flex: 1; padding: 12px;">⏱️ Countdown starten</button>
+              <button id="admin-stop-timer-btn" class="btn-danger" style="padding: 12px 18px;">⏹ Stopp</button>
+            </div>
+          </div>
+
+          <!-- Live Media Control Box -->
+          <div id="admin-media-control-box" class="hidden" style="background: #090d16; padding: 16px; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.08);">
+            <label style="font-size: 0.85rem; font-weight: 800; color: #38bdf8; display: block; margin-bottom: 8px;">🎬 Live-Medien-Steuerung auf allen Geräten</label>
+            <div style="display: flex; gap: 8px;">
+              <button id="admin-media-play-btn" class="submit-btn" style="flex: 1; padding: 10px; font-size: 0.9rem;">▶️ Medium starten</button>
+              <button id="admin-media-pause-btn" class="btn-secondary" style="padding: 10px 14px;">⏸️ Pause</button>
+              <button id="admin-media-stop-btn" class="btn-danger" style="padding: 10px 14px;">⏹ Stopp</button>
+            </div>
+          </div>
+
+          <!-- Push Eilmeldung -->
+          <div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted);">Push-Eilmeldung</label>
+              <span id="admin-announcement-status-pill" class="badge badge-info hidden" style="font-size: 0.7rem; padding: 2px 8px;">Aktive Meldung</span>
+            </div>
+
+            <!-- Active Announcement Info Card for Admin -->
+            <div id="admin-active-announcement-card" class="hidden" style="margin-bottom: 10px; background: rgba(239, 68, 68, 0.15); border: 1px solid #ef4444; border-radius: var(--radius-md); padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+              <div style="font-size: 0.85rem; color: #fca5a5; display: flex; align-items: center; gap: 6px; overflow: hidden;">
+                <span style="font-weight: 900; flex-shrink: 0;">📢 Aktiv:</span>
+                <span id="admin-active-announcement-text" style="color: white; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
+              </div>
+              <button type="button" id="admin-dismiss-active-announcement-btn" class="btn-danger" style="padding: 4px 8px; font-size: 0.75rem; flex-shrink: 0;" title="Meldung auf allen Geräten entfernen">✕ Löschen</button>
+            </div>
+
+            <div class="announcement-form-row" style="display: flex; gap: 8px;">
+              <input type="text" id="admin-announcement-input" class="input-field" placeholder="z. B. Eispause in 5 Minuten!">
+              <button id="admin-send-announcement-btn" class="submit-btn" style="padding: 10px 14px; white-space: nowrap;">📢 Senden</button>
+              <button id="admin-clear-announcement-btn" class="btn-secondary" style="padding: 10px 12px; white-space: nowrap;">Löschen</button>
+            </div>
+          </div>
+
+          <!-- Live Participants Vote Tracker (Only for Quiz Slides) -->
+          <div id="admin-vote-tracker-card" class="hidden" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <div class="admin-card-title" style="font-size: 1rem;">
+              <span>👥 Teilnehmer Abstimmungs-Status</span>
+            </div>
+            <div id="admin-live-participants-list" style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-height: 380px; min-height: 140px; overflow-y: auto; padding-right: 4px;"></div>
+          </div>
+
+          <!-- Emergency Reset -->
+          <div style="margin-top: auto; border-top: 1px solid var(--border-color); padding-top: 12px;">
+            <button id="admin-reset-tour-btn" class="btn-danger" style="width: 100%; padding: 10px;">
+              🔄 Rallye & Punkte komplett zurücksetzen
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 2: SLIDE STUDIO (FULL DESIGNER WORKSPACE) -->
+      <div id="admin-studio-view" class="slide-studio-split hidden">
+        
+        <!-- Studio Left: Slide Deck Navigator -->
+        <div class="studio-slide-deck">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+            <button id="studio-add-slide-btn" class="submit-btn" style="padding: 12px; font-size: 0.95rem; flex: 1;">
+              ➕ Neue Folie erstellen
+            </button>
+            <button id="studio-seed-sample-btn" class="btn-secondary" style="padding: 12px; font-size: 0.85rem;" title="Standard-Tour neu laden">
+              📚 Muster laden
+            </button>
+          </div>
+
+          <div style="font-size: 0.9rem; font-weight: 800; color: var(--text-muted); margin-top: 8px;">
+            Folien-Deck (Klicken zum Bearbeiten)
+          </div>
+
+          <div id="studio-slides-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+        </div>
+
+        <!-- Studio Right: Rich Visual Editor -->
+        <div class="studio-editor-panel">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 14px;">
+            <h3 id="studio-editor-title" style="font-size: 1.4rem; font-weight: 900; color: white;">Folie bearbeiten</h3>
+            <span id="studio-editor-type-badge" class="badge badge-info">INFO</span>
+          </div>
+
+          <form id="studio-slide-form" style="display: flex; flex-direction: column; gap: 18px;">
+            <input type="hidden" id="edit-slide-id">
+
+            <div class="form-grid-2">
+              <div>
+                <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Folientyp</label>
+                <select id="edit-slide-type" class="input-field" style="height: 48px;" required>
+                  <option value="info">ℹ️ Information / Station (Keine Punkte)</option>
+                  <option value="transit">🚶 Unterwegs / Wegstrecke (Transfer)</option>
+                  <option value="multiple_choice">❓ Multiple-Choice Quiz (4 Optionen)</option>
+                  <option value="estimation">🎯 Zahlen- / Schätzfrage (Gradient)</option>
+                  <option value="action">📸 Challenge / Foto-Aufgabe</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Titel der Folie</label>
+                <input type="text" id="edit-slide-title" class="input-field" placeholder="z. B. Station 1: Altes Rathaus" required>
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Beschreibung / Textinhalt</label>
+              <textarea id="edit-slide-desc" class="input-field" rows="4" placeholder="Erklärungen, historische Fakten, Anweisungen..."></textarea>
+            </div>
+
+            <div class="form-grid-2">
+              <div>
+                <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Standort-Name (Wegpunkt)</label>
+                <input type="text" id="edit-slide-location" class="input-field" placeholder="z. B. Marktplatz 1 (Vor dem Brunnen)">
+              </div>
+              <div>
+                <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Treffpunkt-Uhrzeit (optional)</label>
+                <input type="text" id="edit-slide-meeting" class="input-field" placeholder="z. B. 14:30 Uhr">
+              </div>
+            </div>
+
+            <!-- GPS Koordinaten & Map Picker -->
+            <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: var(--radius-md); padding: 14px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <label style="font-size: 0.85rem; font-weight: 800; color: #38bdf8;">📍 GPS-Koordinaten (Zielort / Wegpunkt)</label>
+                <span id="edit-slide-coords-badge" style="font-size: 0.8rem; font-weight: 800; color: var(--text-muted);">Kein Standort</span>
+              </div>
+
+              <input type="hidden" id="edit-slide-lat">
+              <input type="hidden" id="edit-slide-lng">
+
+              <div style="display: flex; gap: 10px; align-items: center;">
+                <button type="button" id="edit-open-map-picker-btn" class="btn-secondary" style="flex: 1; padding: 10px; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                  📍 Standort auf Karte anpinnen
+                </button>
+                <button type="button" id="edit-clear-coords-btn" class="btn-danger hidden" style="padding: 10px 14px;" title="Koordinaten entfernen">
+                  ❌ Löschen
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Medientyp</label>
+              <select id="edit-slide-media-type" class="input-field" style="height: 48px;">
+                <option value="image">📷 Bild (Foto / Grafik)</option>
+                <option value="audio">🎵 Audio (Sound / Sprachaufnahme)</option>
+                <option value="video">🎬 Video (Film / Clip)</option>
+                <option value="image_and_audio">🖼️+🎵 Bild + Sound (Audio-Guide)</option>
+              </select>
+            </div>
+
+            <!-- Haupt-Medium (Bild / Video / Audio) -->
+            <div>
+              <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Bild- / Medien-Datei hochladen oder URL</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="url" id="edit-slide-media-url" class="input-field" placeholder="https://... oder Datei hochladen">
+                <input type="file" id="edit-slide-media-file" accept="image/*,video/*,audio/*" class="hidden">
+                <button type="button" id="edit-upload-media-btn" class="btn-secondary" style="white-space: nowrap;">📁 Datei wählen</button>
+              </div>
+              <div id="edit-media-preview-container" style="margin-top: 10px; max-height: 200px; overflow: hidden; border-radius: var(--radius-md);" class="hidden">
+                <img id="edit-media-preview-img" src="" alt="Vorschau" style="width: 100%; height: 200px; object-fit: cover;">
+              </div>
+            </div>
+
+            <!-- Zusätzliche Sound-Datei (bei Bild + Sound) -->
+            <div id="edit-audio-url-wrapper" class="hidden">
+              <label style="font-size: 0.85rem; font-weight: 800; color: #38bdf8; display: block; margin-bottom: 6px;">🎵 Zusätzliche Sound- / Audio-Guide-Datei</label>
+              <div style="display: flex; gap: 8px;">
+                <input type="url" id="edit-slide-audio-url" class="input-field" placeholder="Sound-URL oder Datei hochladen">
+                <input type="file" id="edit-slide-audio-file" accept="audio/*" class="hidden">
+                <button type="button" id="edit-upload-audio-btn" class="btn-secondary" style="white-space: nowrap;">🎵 Audio wählen</button>
+              </div>
+            </div>
+
+            <!-- Quiz Question (For MC, Estimation, Action) -->
+            <div id="edit-question-section" class="hidden">
+              <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Quiz-Frage / Aufgabenstellung</label>
+              <input type="text" id="edit-slide-question" class="input-field" placeholder="z. B. In welchem Jahrhundert wurde der Turm erbaut?">
+            </div>
+
+            <!-- Multiple Choice Options Editor -->
+            <div id="edit-mc-section" class="hidden" style="background: #090d16; padding: 18px; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 12px;">
+              <label style="font-size: 0.9rem; font-weight: 800; color: #fbbf24;">Antwortoptionen & Richtige Lösung wählen (Radio-Button)</label>
+              
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="radio" name="correct_opt_radio" id="radio-opt-0" value="0" checked style="transform: scale(1.4); cursor: pointer;">
+                <input type="text" id="edit-slide-opt0" class="input-field" placeholder="Option A (z. B. 12. Jahrhundert)">
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="radio" name="correct_opt_radio" id="radio-opt-1" value="1" style="transform: scale(1.4); cursor: pointer;">
+                <input type="text" id="edit-slide-opt1" class="input-field" placeholder="Option B (z. B. 15. Jahrhundert)">
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="radio" name="correct_opt_radio" id="radio-opt-2" value="2" style="transform: scale(1.4); cursor: pointer;">
+                <input type="text" id="edit-slide-opt2" class="input-field" placeholder="Option C (z. B. 18. Jahrhundert)">
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <input type="radio" name="correct_opt_radio" id="radio-opt-3" value="3" style="transform: scale(1.4); cursor: pointer;">
+                <input type="text" id="edit-slide-opt3" class="input-field" placeholder="Option D (z. B. 20. Jahrhundert)">
+              </div>
+            </div>
+
+            <!-- Estimation Settings Editor -->
+            <div id="edit-estimation-section" class="hidden" style="background: #090d16; padding: 18px; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 14px;">
+              <label style="font-size: 0.9rem; font-weight: 800; color: #f472b6;">Schätzfragen-Parameter (Zielzahl & Gradient)</label>
+              <div class="form-grid-2">
+                <div>
+                  <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">Exakter numerischer Zielwert</label>
+                  <input type="number" id="edit-slide-target-val" class="input-field" placeholder="z. B. 284" step="any">
+                </div>
+                <div>
+                  <label style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">Gradienten-Skalierung (Toleranz)</label>
+                  <input type="number" id="edit-slide-scale" class="input-field" value="100">
+                </div>
+              </div>
+            </div>
+
+            <!-- Scoring & Timer Settings -->
+            <div class="form-grid-2">
+              <div>
+                <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 4px;">Max. Punkte für diese Aufgabe</label>
+                <input type="number" id="edit-slide-max-points" class="input-field" value="100" min="0" max="1000">
+              </div>
+              <div>
+                <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 4px;">Standard-Timer (Sekunden)</label>
+                <input type="number" id="edit-slide-countdown" class="input-field" value="20" min="5" max="180">
+              </div>
+            </div>
+
+            <!-- Admin-Private Memory Notes / Gedächtnisstütze -->
+            <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-md); padding: 14px;">
+              <label style="font-size: 0.85rem; font-weight: 800; color: #fbbf24; display: block; margin-bottom: 6px;">
+                💡 Admin-Gedächtnisstütze / Private Notiz (wird Mitspielern nie angezeigt)
+              </label>
+              <textarea id="edit-slide-admin-notes" class="input-field" rows="3" placeholder="Zusatzwissen, Hintergrundgeschichten, Vorlesehinweise oder Erklärungen zur Auflösung..."></textarea>
+              <small style="color: var(--text-muted); font-size: 0.75rem; display: block; margin-top: 4px;">
+                * Bei Quizfragen wird diese Notiz dem Admin in Phase 4 (Auflösung) angezeigt, bei Info/Transit-Folien direkt.
+              </small>
+            </div>
+
+            <div style="display: flex; gap: 12px; margin-top: 10px;">
+              <button type="submit" class="submit-btn" style="flex: 1;">💾 Folie speichern</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- TAB 3: TOUR ROUTE MAP -->
+      <div id="admin-route-view" class="hidden" style="height: 100%; display: flex; flex-direction: column; gap: 10px; padding: 2px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; background: #1a2234; padding: 8px 14px; border-radius: var(--radius-md); border: 1px solid var(--border-color); flex-wrap: wrap; gap: 6px;">
+          <div style="min-width: 140px;">
+            <strong style="font-size: 0.95rem; color: white; display: flex; align-items: center; gap: 6px;">🗺️ Tour-Route</strong>
+            <small style="color: var(--text-muted); font-size: 0.75rem; display: block;">Wegpunkte in Gehrichtung verbunden</small>
+          </div>
+          <div id="route-stats-badge" class="badge badge-info" style="font-size: 0.78rem; padding: 4px 10px; white-space: normal; text-align: right; max-width: 100%;">
+            8 Stationen
+          </div>
+        </div>
+        <div id="admin-route-map" style="flex: 1; min-height: 380px; width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border-color); z-index: 1;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- INTERACTIVE MAP PICKER MODAL -->
+  <div id="admin-map-picker-modal" class="modal-overlay hidden" style="z-index: 99999;">
+    <div class="modal-content" style="max-width: 840px; width: 95vw; height: 88vh; display: flex; flex-direction: column; gap: 12px; padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+        <div>
+          <h3 style="font-size: 1.3rem; font-weight: 900; color: white;">📍 Standort auf Karte anpinnen</h3>
+          <small style="color: var(--text-muted);">Klicke auf die Karte, um den Pin zu setzen oder zu verschieben.</small>
+        </div>
+        <button type="button" id="close-map-picker-btn" class="icon-btn" style="padding: 6px 12px; font-size: 1.1rem;">✕</button>
+      </div>
+
+      <!-- PLZ / Ort Suche Bar -->
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="text" id="picker-search-input" class="input-field" placeholder="🔎 PLZ oder Ort suchen (z. B. 99084, Erfurt Fischmarkt, Berlin)..." style="flex: 1; height: 42px; font-size: 0.95rem;">
+        <button type="button" id="picker-search-btn" class="btn-secondary" style="height: 42px; padding: 0 16px; font-size: 0.95rem; white-space: nowrap;">
+          🔍 Suchen
+        </button>
+      </div>
+      <div id="picker-search-feedback" class="hidden" style="font-size: 0.85rem; color: #f59e0b; padding: 0 4px;"></div>
+
+      <div id="picker-map" style="flex: 1; width: 100%; border-radius: var(--radius-md); border: 1px solid var(--border-color); z-index: 1;"></div>
+
+      <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-top: 6px; border-top: 1px solid var(--border-color); flex-wrap: wrap;">
+        <div id="picker-coords-text" style="font-size: 0.9rem; font-weight: 800; color: #38bdf8;">Klicke auf die Karte, um einen Pin zu setzen</div>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" id="picker-remove-pin-btn" class="btn-danger" style="padding: 10px 16px;">❌ Pin löschen</button>
+          <button type="button" id="picker-confirm-btn" class="submit-btn" style="padding: 10px 20px; font-size: 0.95rem;">📍 Standort übernehmen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <!-- Leaflet Map JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="/js/audioSynth.js?v=1.5.1"></script>
+  <script src="/js/confetti.js?v=1.5.1"></script>
+  <script src="/js/odometer.js?v=1.5.1"></script>
+  <script src="/js/admin.js?v=1.5.1"></script>
+  <script src="/js/app.js?v=1.5.1"></script>
+</body>
+</html>

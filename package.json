@@ -1,0 +1,32 @@
+{
+  "name": "family-tour-quiz",
+  "version": "1.0.0",
+  "description": "Responsive Web-Anwendung (Companion App) für Familienausflüge, Stadtrallyes und interaktive Führungen mit Live-Synchronisation.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "seed": "node src/seed.js",
+    "test": "node test/run_all.js"
+  },
+  "keywords": [
+    "quiz",
+    "rallye",
+    "tour-guide",
+    "companion-app",
+    "family",
+    "synchronous",
+    "websockets",
+    "sqlite"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "uuid": "^11.1.0",
+    "ws": "^8.18.0"
+  }
+}
