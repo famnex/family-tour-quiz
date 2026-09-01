@@ -386,6 +386,46 @@ app.get('/api/leaderboard', (req, res) => {
   res.json(getLeaderboard());
 });
 
+// Pedestrian / Foot Routing API Proxy (Kürzeste Fußgänger-Route über Fußwege, Parks & Straßen)
+const routeCache = new Map();
+
+app.get('/api/route', async (req, res) => {
+  const { coords } = req.query;
+  if (!coords) {
+    return res.status(400).json({ error: 'coords parameter erforderlich (lng,lat;lng,lat...)' });
+  }
+
+  if (routeCache.has(coords)) {
+    return res.json(routeCache.get(coords));
+  }
+
+  // 1. Priorisiere OpenStreetMap Fußgänger-Routing (routed-foot)
+  const urls = [
+    `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${coords}?overview=full&geometries=geojson`,
+    `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`
+  ];
+
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'FamilienausflugRallye/1.5.4 (Pedestrian Route Planner)' },
+        signal: AbortSignal.timeout(5000)
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.code === 'Ok' && data.routes && data.routes[0]) {
+          routeCache.set(coords, data);
+          return res.json(data);
+        }
+      }
+    } catch (e) {
+      // Nächste Routing-URL versuchen
+    }
+  }
+
+  res.status(502).json({ error: 'Routing-Dienst aktuell nicht erreichbar' });
+});
+
 // Submit Quiz Answer
 app.post('/api/submissions', (req, res) => {
   const userId = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.auth_token || req.body.user_id;

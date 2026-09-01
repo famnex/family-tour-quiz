@@ -208,6 +208,14 @@ async function runE2E() {
     assert.strictEqual(uploadRes.data.success, true);
     assert.ok(uploadRes.data.url.startsWith('/uploads/'));
 
+    // 9. Test Pedestrian Routing Proxy (/api/route)
+    console.log('9. Teste Fußgänger-Routing API (/api/route)...');
+    const routeRes = await request(`${baseUrl}/api/route?coords=11.0328,50.9787;11.0305,50.9802`);
+    assert.strictEqual(routeRes.status, 200);
+    assert.strictEqual(routeRes.data.code, 'Ok');
+    assert.ok(routeRes.data.routes && routeRes.data.routes[0]);
+    assert.ok(routeRes.data.routes[0].geometry.coordinates.length > 0);
+
     // Check participants_status in state
     const stateCheck = await request(`${baseUrl}/api/state`);
     assert.ok(Array.isArray(stateCheck.data.participants_status), 'participants_status muss ein Array sein');

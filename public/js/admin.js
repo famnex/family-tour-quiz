@@ -1578,16 +1578,16 @@ class AdminController {
         totalDurationSeconds = this.cachedRouteGeoJson.duration;
       } else {
         try {
-          // OSRM expects coordinates in lng,lat;lng,lat;... format
-          const osrmUrl = `https://router.project-osrm.org/route/v1/foot/${coordsQuery}?overview=full&geometries=geojson`;
-          const response = await fetch(osrmUrl);
+          // OpenStreetMap Pedestrian Foot Routing via internal API proxy
+          const routeUrl = window.apiUrl(`/api/route?coords=${coordsQuery}`);
+          const response = await fetch(routeUrl);
           if (response.ok) {
             const routeData = await response.json();
             if (routeData.code === 'Ok' && routeData.routes && routeData.routes[0]) {
               const route = routeData.routes[0];
               totalDistanceMeters = route.distance;
               totalDurationSeconds = route.duration;
-              // OSRM GeoJSON coords are [lng, lat] -> Leaflet wants [lat, lng]
+              // GeoJSON coords are [lng, lat] -> Leaflet wants [lat, lng]
               streetCoordinates = route.geometry.coordinates.map(pt => [pt[1], pt[0]]);
               this.cachedRouteGeoJson = {
                 query: coordsQuery,
@@ -1598,7 +1598,7 @@ class AdminController {
             }
           }
         } catch (err) {
-          console.warn('OSRM street routing service unavailable, falling back to direct waypoints', err);
+          console.warn('Foot routing service unavailable, falling back to direct waypoints', err);
         }
       }
 
