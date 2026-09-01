@@ -21,6 +21,8 @@ class RallyeApp {
     this.estDebounceTimer = null;
     this.hasPerformedGrandCeremony = false;
     this.isCeremonyRunning = false;
+    this.fallbackPollingInterval = null;
+    this.wsRetryCount = 0;
   }
 
   async init() {
@@ -297,7 +299,13 @@ class RallyeApp {
   connectWebSocket() {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const basePath = window.APP_BASE || (window.location.pathname.startsWith('/family') ? '/family' : '');
-    const wsUrl = `${protocol}//${window.location.host}${basePath}/ws`;
+    
+    // Teste alternierend /family/ws und /ws falls Proxy-Pfad abweicht
+    const candidateUrls = [
+      `${protocol}//${window.location.host}${basePath}/ws`,
+      `${protocol}//${window.location.host}/ws`
+    ];
+    const wsUrl = candidateUrls[this.wsRetryCount % candidateUrls.length];
 
     try {
       if (this.ws) {
@@ -307,6 +315,7 @@ class RallyeApp {
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
+        this.wsRetryCount = 0;
         this.setConnectionStatus(true);
         if (this.fallbackPollingInterval) {
           clearInterval(this.fallbackPollingInterval);
@@ -332,6 +341,7 @@ class RallyeApp {
       this.ws.onclose = () => {
         this.setConnectionStatus(false);
         this.startFallbackPolling();
+        this.wsRetryCount++;
         setTimeout(() => this.connectWebSocket(), 3000);
       };
 
@@ -340,8 +350,8 @@ class RallyeApp {
         this.startFallbackPolling();
       };
     } catch (e) {
-      console.warn('WebSocket connection error:', e);
       this.startFallbackPolling();
+      this.wsRetryCount++;
       setTimeout(() => this.connectWebSocket(), 3000);
     }
   }

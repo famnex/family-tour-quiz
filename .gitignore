@@ -2,11 +2,8 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-data/*.db
-data/*.db-*
-data/*.db-wal
-data/*.db-shm
-data/*.db-journal
+data/
+data/*
 public/uploads/*
 !public/uploads/.gitkeep
 .DS_Store

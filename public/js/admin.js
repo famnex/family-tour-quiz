@@ -390,6 +390,26 @@ class AdminController {
       });
     }
 
+    // Backup & Import Actions
+    const exportTourBtn = document.getElementById('studio-export-tour-btn');
+    const importTourBtn = document.getElementById('studio-import-tour-btn');
+    const importTourFile = document.getElementById('studio-import-tour-file');
+
+    if (exportTourBtn) {
+      exportTourBtn.addEventListener('click', () => this.exportTour());
+    }
+
+    if (importTourBtn && importTourFile) {
+      importTourBtn.addEventListener('click', () => importTourFile.click());
+      importTourFile.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          this.importTour(file);
+          importTourFile.value = '';
+        }
+      });
+    }
+
     if (slideTypeSelect) {
       slideTypeSelect.addEventListener('change', () => {
         this.toggleSlideTypeFields(slideTypeSelect.value);
@@ -1128,6 +1148,54 @@ class AdminController {
     } catch (e) {
       console.error(e);
     }
+  }
+
+  async exportTour() {
+    try {
+      const res = await fetch(window.apiUrl('/api/admin/tour/export'));
+      if (!res.ok) throw new Error('Export fehlgeschlagen');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `rallye_tour_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+      alert('Fehler beim Herunterladen des Backups');
+    }
+  }
+
+  async importTour(file) {
+    if (!confirm(`Möchtest du die Rallye aus der Datei "${file.name}" importieren? Bestehende Folien werden durch das Backup ersetzt.`)) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const tourData = JSON.parse(e.target.result);
+        const res = await fetch(window.apiUrl('/api/admin/tour/import'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tour_data: tourData })
+        });
+        const data = await res.json();
+        if (data.success) {
+          await this.loadSlides();
+          alert(`Erfolg! ${data.count} Stationen erfolgreich wiederhergestellt! ✅`);
+        } else {
+          alert('Import fehlgeschlagen: ' + (data.error || 'Unbekannter Fehler'));
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Fehler beim Lesen der JSON-Datei');
+      }
+    };
+    reader.readAsText(file);
   }
 
   openSlideEditor(slideId = null) {

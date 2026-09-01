@@ -7,8 +7,8 @@
   <meta name="description" content="Familienausflug-Rallye Companion App – Live-synchronisierte Stadtrallye und Quiz für die ganze Familie">
   <title>Familienausflug-Rallye</title>
   
-  <link rel="manifest" href="manifest.json?v=1.5.6">
-  <link rel="stylesheet" href="css/style.css?v=1.5.6">
+  <link rel="manifest" href="manifest.json?v=1.5.7">
+  <link rel="stylesheet" href="css/style.css?v=1.5.7">
   <!-- Leaflet Map CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script>
@@ -436,6 +436,16 @@
             </button>
           </div>
 
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <button id="studio-export-tour-btn" type="button" class="btn-secondary" style="flex: 1; padding: 8px 10px; font-size: 0.8rem;" title="Komplette Rallye als JSON-Datei sichern">
+              📥 Backup (JSON)
+            </button>
+            <button id="studio-import-tour-btn" type="button" class="btn-secondary" style="flex: 1; padding: 8px 10px; font-size: 0.8rem;" title="Rallye aus JSON-Datei wiederherstellen">
+              📤 Importieren (JSON)
+            </button>
+            <input type="file" id="studio-import-tour-file" accept=".json" class="hidden">
+          </div>
+
           <div style="font-size: 0.9rem; font-weight: 800; color: var(--text-muted); margin-top: 8px;">
             Folien-Deck (Klicken zum Bearbeiten)
           </div>
@@ -667,10 +677,10 @@
   <!-- Scripts -->
   <!-- Leaflet Map JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="js/audioSynth.js?v=1.5.6"></script>
-  <script src="js/confetti.js?v=1.5.6"></script>
-  <script src="js/odometer.js?v=1.5.6"></script>
-  <script src="js/admin.js?v=1.5.6"></script>
-  <script src="js/app.js?v=1.5.6"></script>
+  <script src="js/audioSynth.js?v=1.5.7"></script>
+  <script src="js/confetti.js?v=1.5.7"></script>
+  <script src="js/odometer.js?v=1.5.7"></script>
+  <script src="js/admin.js?v=1.5.7"></script>
+  <script src="js/app.js?v=1.5.7"></script>
 </body>
 </html>

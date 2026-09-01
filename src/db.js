@@ -4,10 +4,31 @@ const fs = require('fs');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'family_tour.db');
 
-// Ensure data directory exists
+// Ensure data & backup directory exists
 const dataDir = path.dirname(DB_PATH);
+const backupDir = path.join(dataDir, 'backups');
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
+}
+if (!fs.existsSync(backupDir)) {
+  fs.mkdirSync(backupDir, { recursive: true });
+}
+
+// 🛡️ Auto-Restore: If main database is missing or empty, restore latest backup
+if (!fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size === 0) {
+  try {
+    const backupFiles = fs.readdirSync(backupDir)
+      .filter(f => f.endsWith('.db'))
+      .sort((a, b) => b.localeCompare(a));
+    
+    if (backupFiles.length > 0) {
+      const latestBackup = path.join(backupDir, backupFiles[0]);
+      console.log(`[Database] 🛡️ Stelle Datenbank aus Backup wieder her: ${backupFiles[0]}`);
+      fs.copyFileSync(latestBackup, DB_PATH);
+    }
+  } catch (err) {
+    console.warn('[Database] Auto-Restore Prüfung fehlgeschlagen:', err);
+  }
 }
 
 const db = new Database(DB_PATH);
@@ -16,6 +37,40 @@ const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('synchronous = NORMAL');
 db.pragma('foreign_keys = ON');
+
+// 🛡️ Automated Backup Function (Rotating up to 15 Backups)
+function createAutomaticBackup() {
+  try {
+    if (!fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size === 0) return;
+    
+    const now = new Date();
+    const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupTarget = path.join(backupDir, `family_tour_${dateStr}.db`);
+    
+    // Use SQLite backup API for 100% consistent transactional copy
+    db.backup(backupTarget)
+      .then(() => {
+        // Also keep a static family_tour.db.bak for quick manual access
+        fs.copyFileSync(backupTarget, path.join(dataDir, 'family_tour.db.bak'));
+
+        // Rotate: keep only the newest 15 backups
+        const files = fs.readdirSync(backupDir)
+          .filter(f => f.endsWith('.db'))
+          .sort((a, b) => b.localeCompare(a));
+        
+        if (files.length > 15) {
+          files.slice(15).forEach(oldFile => {
+            try { fs.unlinkSync(path.join(backupDir, oldFile)); } catch (e) {}
+          });
+        }
+      })
+      .catch(err => {
+        console.warn('[Database] Backup fehlgeschlagen:', err);
+      });
+  } catch (err) {
+    console.warn('[Database] Backup Fehler:', err);
+  }
+}
 
 function initSchema() {
   db.exec(`
@@ -138,9 +193,14 @@ function bumpContentVersion() {
 
 initSchema();
 
+// Run initial backup and schedule hourly automated backups
+setTimeout(() => createAutomaticBackup(), 3000);
+setInterval(() => createAutomaticBackup(), 3600000);
+
 module.exports = {
   db,
   initSchema,
   bumpContentVersion,
+  createAutomaticBackup,
   DB_PATH
 };

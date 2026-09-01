@@ -7,7 +7,7 @@ const cors = require('cors');
 const { WebSocketServer, WebSocket } = require('ws');
 const { v4: uuidv4 } = require('uuid');
 
-const { db, bumpContentVersion } = require('./src/db');
+const { db, bumpContentVersion, createAutomaticBackup } = require('./src/db');
 const { settleSlideScores, getLeaderboard, getSlideResults } = require('./src/quizEngine');
 const { seedDatabase } = require('./src/seed');
 
@@ -858,10 +858,124 @@ app.post('/api/admin/slides/reorder', (req, res) => {
 
 // Slide Studio: Re-seed sample tour
 app.post('/api/admin/seed-sample', (req, res) => {
+  createAutomaticBackup();
   seedDatabase();
   broadcastState();
   broadcastLeaderboard();
   res.json({ success: true, message: 'Beispiel-Tour neu geladen!' });
+});
+
+// 📥 Admin: Export Full Tour as JSON (100% Sicherung)
+app.get('/api/admin/tour/export', (req, res) => {
+  try {
+    const slides = db.prepare('SELECT * FROM slides ORDER BY order_index ASC').all();
+    const parsedSlides = slides.map(s => ({
+      ...s,
+      options: s.options_json ? JSON.parse(s.options_json) : []
+    }));
+
+    const exportData = {
+      export_version: '1.5.7',
+      exported_at: new Date().toISOString(),
+      tour_name: 'Familienausflug Rallye',
+      total_slides: parsedSlides.length,
+      slides: parsedSlides
+    };
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="rallye_backup_${Date.now()}.json"`);
+    res.json(exportData);
+  } catch (err) {
+    console.error('Tour Export Fehler:', err);
+    res.status(500).json({ error: 'Fehler beim Exportieren der Tour' });
+  }
+});
+
+// 📤 Admin: Import Full Tour from JSON (Wiederherstellung)
+app.post('/api/admin/tour/import', (req, res) => {
+  try {
+    const { tour_data } = req.body;
+    if (!tour_data || !Array.isArray(tour_data.slides)) {
+      return res.status(400).json({ error: 'Ungültiges Tour-JSON Format' });
+    }
+
+    // Erstelle vor dem Import ein automatisches DB-Backup
+    createAutomaticBackup();
+
+    const insertSlide = db.prepare(`
+      INSERT INTO slides (
+        id, tour_id, order_index, type, title, description,
+        location_name, meeting_time, media_url, audio_url, media_type,
+        question, options_json, correct_option_index, target_value,
+        tolerance, scale_factor, max_points, countdown_seconds, admin_notes,
+        latitude, longitude, created_at
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, datetime('now')
+      )
+    `);
+
+    db.transaction(() => {
+      // Lösche vorherige Folien
+      db.prepare('DELETE FROM quiz_submissions').run();
+      db.prepare('DELETE FROM slides').run();
+
+      tour_data.slides.forEach((s, idx) => {
+        const slideId = s.id || uuidv4();
+        const optionsJson = s.options ? JSON.stringify(s.options) : (s.options_json || null);
+        insertSlide.run(
+          slideId,
+          s.tour_id || 'default',
+          idx,
+          s.type || 'info',
+          s.title || `Station ${idx + 1}`,
+          s.description || '',
+          s.location_name || null,
+          s.meeting_time || null,
+          s.media_url || null,
+          s.audio_url || null,
+          s.media_type || 'image',
+          s.question || null,
+          optionsJson,
+          s.correct_option_index !== undefined ? s.correct_option_index : null,
+          s.target_value !== undefined ? s.target_value : null,
+          s.tolerance !== undefined ? s.tolerance : 10,
+          s.scale_factor !== undefined ? s.scale_factor : 100,
+          s.max_points !== undefined ? s.max_points : 100,
+          s.countdown_seconds !== undefined ? s.countdown_seconds : 20,
+          s.admin_notes || null,
+          s.latitude !== undefined ? s.latitude : null,
+          s.longitude !== undefined ? s.longitude : null
+        );
+      });
+
+      // App-State auf Slide 0 zurücksetzen
+      const first = db.prepare('SELECT id FROM slides ORDER BY order_index ASC LIMIT 1').get();
+      db.prepare(`
+        UPDATE app_state SET 
+          current_slide_id = ?,
+          current_slide_index = 0,
+          phase = 1,
+          timer_status = 'stopped',
+          timer_start = 0,
+          updated_at = datetime('now')
+        WHERE id = 1
+      `).run(first ? first.id : null);
+    })();
+
+    createAutomaticBackup();
+    bumpContentVersion();
+    broadcast({ type: 'content_updated' });
+    broadcastState();
+
+    res.json({ success: true, count: tour_data.slides.length });
+  } catch (err) {
+    console.error('Tour Import Fehler:', err);
+    res.status(500).json({ error: 'Fehler beim Importieren der Tour' });
+  }
 });
 
 // Admin: Upload Media / Files
