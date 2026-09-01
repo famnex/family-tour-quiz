@@ -21,9 +21,22 @@ class AdminController {
     this.lastRenderedCoordsKey = null;
   }
 
-  init() {
+  async init() {
     this.bindEvents();
-    this.loadSlides();
+    await this.loadSlides();
+    await this.fetchLiveState();
+  }
+
+  async fetchLiveState() {
+    try {
+      const res = await fetch(window.apiUrl('/api/state'));
+      if (res.ok) {
+        const state = await res.json();
+        this.updateFromState(state);
+      }
+    } catch (e) {
+      console.warn('Admin live state fetch error:', e);
+    }
   }
 
   isAdminUnlocked() {
@@ -874,6 +887,8 @@ class AdminController {
       if (tabRoute && tabRoute.classList.contains('active')) {
         this.renderRouteMap();
       }
+
+      await this.fetchLiveState();
     } catch (e) {
       console.error('Failed to load slides', e);
     }

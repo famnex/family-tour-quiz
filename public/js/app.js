@@ -234,7 +234,7 @@ class RallyeApp {
     }
   }
 
-  onAuthenticated() {
+  async onAuthenticated() {
     const avatarEl = document.getElementById('user-avatar-circle');
     const nameEl = document.getElementById('user-display-name');
 
@@ -254,10 +254,32 @@ class RallyeApp {
       window.admin.init();
     }
 
+    // 1. Sofort initialen State per HTTP laden (kein Warten auf WS-Verbindung)
+    await this.fetchInitialState();
+
+    // 2. WebSocket für Echtzeit-Synchronisation verbinden
     this.connectWebSocket();
 
     if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
     this.heartbeatInterval = setInterval(() => this.sendHeartbeat(), 10000);
+  }
+
+  async fetchInitialState() {
+    try {
+      const headers = {};
+      if (this.token) headers['Authorization'] = `Bearer ${this.token}`;
+      const res = await fetch(window.apiUrl('/api/state'), { headers });
+      if (res.ok) {
+        const state = await res.json();
+        this.state = state;
+        this.renderState(state);
+        if (window.admin && typeof window.admin.updateFromState === 'function') {
+          window.admin.updateFromState(state);
+        }
+      }
+    } catch (e) {
+      console.warn('Initial state fetch failed:', e);
+    }
   }
 
   connectWebSocket() {
@@ -266,10 +288,19 @@ class RallyeApp {
     const wsUrl = `${protocol}//${window.location.host}${basePath}/ws`;
 
     try {
+      if (this.ws) {
+        try { this.ws.close(); } catch (e) {}
+      }
+
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
         this.setConnectionStatus(true);
+        if (this.fallbackPollingInterval) {
+          clearInterval(this.fallbackPollingInterval);
+          this.fallbackPollingInterval = null;
+        }
+
         this.ws.send(JSON.stringify({
           type: 'identify',
           userId: this.user?.id,
@@ -288,16 +319,26 @@ class RallyeApp {
 
       this.ws.onclose = () => {
         this.setConnectionStatus(false);
-        setTimeout(() => this.connectWebSocket(), 2000);
+        this.startFallbackPolling();
+        setTimeout(() => this.connectWebSocket(), 3000);
       };
 
       this.ws.onerror = () => {
         this.setConnectionStatus(false);
+        this.startFallbackPolling();
       };
     } catch (e) {
       console.warn('WebSocket connection error:', e);
+      this.startFallbackPolling();
       setTimeout(() => this.connectWebSocket(), 3000);
     }
+  }
+
+  startFallbackPolling() {
+    if (this.fallbackPollingInterval) return;
+    this.fallbackPollingInterval = setInterval(() => {
+      this.fetchInitialState();
+    }, 2500);
   }
 
   setConnectionStatus(online) {

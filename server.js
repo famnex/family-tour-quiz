@@ -15,18 +15,14 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ noServer: true });
 
-// Handle WebSocket Upgrade for both /ws and /family/ws (subpath proxy support)
+// Handle WebSocket Upgrade for all proxy & subpath routes
 server.on('upgrade', (request, socket, head) => {
   try {
-    const pathname = new URL(request.url, `http://${request.headers.host || 'localhost'}`).pathname;
-    if (pathname === '/ws' || pathname === '/family/ws' || pathname.endsWith('/ws')) {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit('connection', ws, request);
-      });
-    } else {
-      socket.destroy();
-    }
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
   } catch (err) {
+    console.error('WS Upgrade Error:', err);
     socket.destroy();
   }
 });
