@@ -36,8 +36,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Skip caching for WebSocket or mutating API calls
-  if (url.pathname.startsWith('/ws') || (url.pathname.startsWith('/api') && event.request.method !== 'GET')) {
+  // Skip caching for WebSocket or any API calls completely (direct network)
+  if (url.pathname.includes('/ws') || url.pathname.includes('/api/')) {
     return;
   }
 

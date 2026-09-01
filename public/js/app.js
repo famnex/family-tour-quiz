@@ -25,8 +25,28 @@ class RallyeApp {
 
   async init() {
     this.initOdometer();
-    this.initPWA();
     this.bindEvents();
+
+    // Unregister legacy ServiceWorker to avoid stale subpath cache
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (const reg of registrations) {
+          reg.unregister().catch(() => {});
+        }
+      }).catch(() => {});
+    }
+
+    if (window.admin) {
+      window.admin.init();
+    }
+
+    // 1. Sofort initialen State laden & rendern
+    await this.fetchInitialState();
+
+    // 2. Fallback Polling sofort starten
+    this.startFallbackPolling();
+
+    // 3. Authentifizierung prüfen & WebSocket verbinden
     await this.checkAuth();
   }
 
@@ -34,14 +54,6 @@ class RallyeApp {
     const odoContainer = document.getElementById('odometer-container');
     if (odoContainer && typeof Odometer !== 'undefined') {
       this.odometer = new Odometer(odoContainer, 4);
-    }
-  }
-
-  initPWA() {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(err => {
-        console.warn('Service Worker registration failed:', err);
-      });
     }
   }
 
@@ -457,13 +469,20 @@ class RallyeApp {
   }
 
   renderSlide(slide, index, total) {
-    if (!slide) return;
-
-    const isNewSlide = this.currentSlideId !== slide.id;
-    this.currentSlideId = slide.id;
-
+    const titleEl = document.getElementById('slide-title');
+    const descEl = document.getElementById('slide-description');
     const badge = document.getElementById('slide-badge');
     const footerStation = document.getElementById('footer-station-indicator');
+    const mediaContainer = document.getElementById('slide-media-container');
+
+    if (!slide) {
+      if (titleEl) titleEl.textContent = 'Willkommen zur Familien-Rallye! 🌟';
+      if (descEl) descEl.textContent = 'Bereit für die Rallye? Der Spielleiter schaltet gleich die erste Station frei!';
+      if (badge) badge.textContent = 'Rallye bereit';
+      if (footerStation) footerStation.textContent = '🌟 Startbereit';
+      if (mediaContainer) mediaContainer.classList.add('hidden');
+      return;
+    }
     if (slide.type === 'transit') {
       badge.textContent = `🚶 Unterwegs (${index + 1}/${total})`;
       if (footerStation) footerStation.textContent = `🚶 Unterwegs (${index + 1}/${total})`;

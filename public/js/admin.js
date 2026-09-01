@@ -591,7 +591,19 @@ class AdminController {
 
   renderAdminLivePreview(state, currentSlide, isQuizSlide) {
     const previewBox = document.getElementById('admin-live-preview-box');
-    if (!previewBox || !currentSlide) return;
+    if (!previewBox) return;
+
+    if (!currentSlide) {
+      previewBox.innerHTML = `
+        <div style="text-align: center; padding: 25px; color: var(--text-muted);">
+          <div style="font-size: 2.2rem; margin-bottom: 8px;">🎬</div>
+          <p><strong>Noch keine Stationen in der Rallye vorhanden.</strong></p>
+          <p style="font-size: 0.85rem; margin-top: 4px;">Öffne das Folien-Studio oder lade eine Muster-Rallye.</p>
+        </div>
+      `;
+      previewBox.classList.remove('hidden');
+      return;
+    }
 
     const labelEl = document.getElementById('admin-preview-phase-label');
     const titleEl = document.getElementById('admin-preview-title');
