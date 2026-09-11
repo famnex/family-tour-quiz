@@ -44,7 +44,7 @@ function createAutomaticBackup() {
     if (!fs.existsSync(DB_PATH) || fs.statSync(DB_PATH).size === 0) return;
     
     const now = new Date();
-    const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const dateStr = now.toISOString().replace(/[:.]/g, '-') + '-' + require('crypto').randomBytes(3).toString('hex');
     const backupTarget = path.join(backupDir, `family_tour_${dateStr}.db`);
     
     // Use SQLite backup API for 100% consistent transactional copy
@@ -194,8 +194,8 @@ function bumpContentVersion() {
 initSchema();
 
 // Run initial backup and schedule hourly automated backups
-setTimeout(() => createAutomaticBackup(), 3000);
-setInterval(() => createAutomaticBackup(), 3600000);
+setTimeout(() => createAutomaticBackup(), 3000).unref();
+setInterval(() => createAutomaticBackup(), 3600000).unref();
 
 module.exports = {
   db,

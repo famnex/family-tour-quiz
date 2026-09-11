@@ -19,7 +19,12 @@ if errorlevel 1 (
 REM 2. Abhaengigkeiten pruefen
 if not exist node_modules (
     echo INFO: Installiere Abhaengigkeiten - bitte kurz warten...
-    call npm install
+    call npm ci
+    if errorlevel 1 (
+        echo FEHLER: Abhaengigkeiten konnten nicht installiert werden.
+        pause
+        exit /b 1
+    )
 )
 
 REM 3. Datenbank pruefen
@@ -34,18 +39,18 @@ echo ---------------------------------------------------
 echo Fuer Smartphones im selben WLAN:
 echo Oeffne auf den Handys die IP-Adresse dieses PCs:
 ipconfig | findstr /i "IPv4"
-echo Port: :3000 (z.B. http://192.168.178.xx:3000)
+echo Port: :5500 (z.B. http://192.168.178.xx:5500)
 echo.
 echo Auf diesem PC:
-echo http://localhost:3000
+echo http://localhost:5500
 echo ---------------------------------------------------
 echo.
 
 REM 5. Browser oeffnen
-start http://localhost:3000
+start http://localhost:5500
 
 REM 6. Server starten
-echo INFO: Starte Rallye-Server auf Port 3000...
+echo INFO: Starte Rallye-Server auf Port 5500...
 echo Druecke STRG+C um den Server zu beenden.
 echo.
 

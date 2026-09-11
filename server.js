@@ -3,7 +3,7 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const cookieParser = require('cookie-parser');
-const cors = require('cors');
+const { randomBytes } = require('crypto');
 const { WebSocketServer, WebSocket } = require('ws');
 const { v4: uuidv4 } = require('uuid');
 
@@ -29,7 +29,42 @@ server.on('upgrade', (request, socket, head) => {
 
 const PORT = process.env.PORT || 5500;
 
-app.use(cors());
+// Sessions are independent of the public player IDs shown in rankings.
+db.exec(`CREATE TABLE IF NOT EXISTS sessions (
+  token TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  admin INTEGER NOT NULL DEFAULT 0, expires_at INTEGER NOT NULL
+)`);
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || randomBytes(12).toString('base64url');
+if (!process.env.ADMIN_PASSWORD) console.log(`🔑 Admin-Passwort für diesen Start: ${ADMIN_PASSWORD}`);
+function session(token, admin = false) {
+  if (typeof token !== 'string') return null;
+  return db.prepare('SELECT * FROM sessions WHERE token = ? AND expires_at > ? AND admin = ?')
+    .get(token, Date.now(), admin ? 1 : 0);
+}
+function playerId(req) {
+  const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.auth_token;
+  return session(token)?.user_id || null;
+}
+function isAdmin(req) { return !!session(req.cookies?.admin_token, true); }
+function createSession(userId, admin = false) {
+  db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
+  const token = randomBytes(32).toString('hex');
+  db.prepare('INSERT INTO sessions VALUES (?, ?, ?, ?)').run(token, userId, admin ? 1 : 0,
+    Date.now() + (admin ? 8 * 60 * 60 * 1000 : 30 * 86400000));
+  return token;
+}
+function cookieOptions(maxAge) {
+  return { maxAge, httpOnly: true, sameSite: 'strict', path: '/', secure: process.env.COOKIE_SECURE === 'true' };
+}
+function publicSlide(slide, admin = false, reveal = false) {
+  const result = { ...slide, options: slide.options_json ? JSON.parse(slide.options_json) : [] };
+  if (!admin) {
+    delete result.admin_notes;
+    if (!reveal) { delete result.correct_option_index; delete result.target_value; }
+  }
+  delete result.options_json;
+  return result;
+}
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(cookieParser());
@@ -80,7 +115,7 @@ function broadcast(data, filterFn = null) {
 function broadcastState() {
   for (const [clientWs, clientData] of wsClients.entries()) {
     if (clientWs.readyState === WebSocket.OPEN) {
-      const state = getFullAppState(clientData?.userId || null);
+      const state = getFullAppState(clientData?.userId || null, !!session(clientData?.adminToken, true));
       clientWs.send(JSON.stringify({ type: 'state_update', state }));
     }
   }
@@ -99,7 +134,7 @@ function broadcastLeaderboard() {
 // STATE MANAGEMENT HELPERS
 // ==========================================
 
-function getFullAppState(userId = null) {
+function getFullAppState(userId = null, admin = false) {
   const state = db.prepare('SELECT * FROM app_state WHERE id = 1').get();
   const allSlides = db.prepare('SELECT * FROM slides ORDER BY order_index ASC').all();
   
@@ -113,10 +148,7 @@ function getFullAppState(userId = null) {
   // Parse options_json for current slide if present
   let sanitizedSlide = null;
   if (currentSlide) {
-    sanitizedSlide = {
-      ...currentSlide,
-      options: currentSlide.options_json ? JSON.parse(currentSlide.options_json) : []
-    };
+    sanitizedSlide = publicSlide(currentSlide, admin, state.phase >= 4);
   }
 
   // If user requested, fetch their submission for the current slide
@@ -130,7 +162,7 @@ function getFullAppState(userId = null) {
 
   // Submission statistics & live player vote tracking for Admin
   let submissionCount = 0;
-  const allUsers = db.prepare("SELECT id, name, role, avatar_emoji, avatar_color, score, last_seen FROM users ORDER BY score DESC, name ASC").all();
+  const allUsers = db.prepare("SELECT id, name, role, avatar_emoji, avatar_color, score, last_seen FROM users WHERE role = 'player' ORDER BY score DESC, name ASC").all();
   let totalPlayers = allUsers.length;
   
   const submissions = currentSlide ? db.prepare(`
@@ -152,8 +184,8 @@ function getFullAppState(userId = null) {
       score: u.score || 0,
       has_submitted: !!sub,
       submitted_at: sub ? sub.submitted_at : null,
-      is_correct: sub ? sub.is_correct : null,
-      final_points: sub ? sub.final_points : null
+      is_correct: sub && (admin || state.phase >= 4) ? sub.is_correct : null,
+      final_points: sub && (admin || state.phase >= 4) ? sub.final_points : null
     };
   });
 
@@ -167,6 +199,8 @@ function getFullAppState(userId = null) {
   }
 
   return {
+    server_time: Date.now(),
+    media_status: state.media_status,
     phase: state.phase,
     current_slide_index: state.current_slide_index,
     total_slides: allSlides.length,
@@ -208,6 +242,11 @@ function startTimerOnServer(durationSeconds) {
 
   const duration = parseInt(durationSeconds, 10) || 20;
   const now = Date.now();
+  const active = db.prepare('SELECT current_slide_id FROM app_state WHERE id = 1').get();
+  if (active.current_slide_id) {
+    db.prepare('UPDATE quiz_submissions SET is_correct = 0, final_points = 0, raw_score = 0, speed_bonus_pct = 0, rank_in_speed = 0 WHERE slide_id = ?').run(active.current_slide_id);
+    db.prepare('UPDATE users SET score = COALESCE((SELECT SUM(final_points) FROM quiz_submissions WHERE user_id = users.id), 0)').run();
+  }
 
   db.prepare(`
     UPDATE app_state SET 
@@ -259,107 +298,110 @@ function expireTimerOnServer() {
 // REST API ROUTES
 // ==========================================
 
-// Auth: Login / Register (No password required)
+// Auth: passwordless players, authenticated admin sessions.
 app.post('/api/auth/login', (req, res) => {
-  const { name, avatar_color, avatar_emoji, role } = req.body;
-  if (!name || name.trim() === '') {
-    return res.status(400).json({ error: 'Name ist erforderlich' });
-  }
-
+  const { name, avatar_color, avatar_emoji } = req.body;
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > 20)
+    return res.status(400).json({ error: 'Bitte einen Namen mit 1–20 Zeichen eingeben.' });
   const cleanName = name.trim();
-  const userRole = role === 'admin' ? 'admin' : 'player';
-  const color = avatar_color || '#4f46e5';
-  const emoji = avatar_emoji || '🚀';
-
+  const color = /^#[0-9a-f]{6}$/i.test(avatar_color || '') ? avatar_color : '#4f46e5';
+  const emoji = typeof avatar_emoji === 'string' && avatar_emoji.length <= 12 ? avatar_emoji : '🌟';
   let user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(cleanName);
-
+  if (user && user.id !== playerId(req))
+    return res.status(409).json({ error: 'Dieser Name spielt bereits mit. Bitte ergänze z. B. einen Nachnamensbuchstaben.' });
   if (!user) {
     const id = uuidv4();
-    db.prepare(`
-      INSERT INTO users (id, name, role, avatar_color, avatar_emoji, score, created_at, last_seen)
-      VALUES (?, ?, ?, ?, ?, 0, datetime('now'), datetime('now'))
-    `).run(id, cleanName, userRole, color, emoji);
-
+    db.prepare(`INSERT INTO users (id,name,role,avatar_color,avatar_emoji,score,created_at,last_seen)
+      VALUES (?,?,'player',?,?,0,datetime('now'),datetime('now'))`).run(id, cleanName, color, emoji);
     user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  } else {
-    // Update last_seen and avatar preferences if provided
-    db.prepare(`
-      UPDATE users SET 
-        avatar_color = COALESCE(?, avatar_color),
-        avatar_emoji = COALESCE(?, avatar_emoji),
-        role = ?,
-        last_seen = datetime('now')
-      WHERE id = ?
-    `).run(avatar_color, avatar_emoji, userRole, user.id);
-
-    user = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id);
   }
-
-  res.cookie('auth_token', user.id, { maxAge: 30 * 24 * 60 * 60 * 1000, httpOnly: false });
-  res.json({ user, token: user.id });
+  const token = createSession(user.id);
+  res.cookie('auth_token', token, cookieOptions(30 * 86400000));
+  res.json({ user, token });
 });
-
-// Auth: Get current session user
 app.get('/api/auth/me', (req, res) => {
-  const userId = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.auth_token;
-  if (!userId) {
-    return res.status(401).json({ error: 'Nicht authentifiziert' });
-  }
-
-  let user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
-  if (!user) {
-    const fallbackName = req.headers['x-user-name'];
-    if (fallbackName && fallbackName.trim() !== '') {
-      user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(fallbackName.trim());
-      if (!user) {
-        const newId = uuidv4();
-        db.prepare(`
-          INSERT INTO users (id, name, role, avatar_color, avatar_emoji, score, created_at, last_seen)
-          VALUES (?, ?, 'player', '#4f46e5', '🌟', 0, datetime('now'), datetime('now'))
-        `).run(newId, fallbackName.trim());
-        user = db.prepare('SELECT * FROM users WHERE id = ?').get(newId);
-      }
-    }
-  }
-
-  if (!user) {
-    return res.status(401).json({ error: 'Benutzer nicht gefunden' });
-  }
-
-  // Update last seen
-  db.prepare("UPDATE users SET last_seen = datetime('now') WHERE id = ?").run(user.id);
+  const id = playerId(req);
+  const user = id && db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+  if (!user) return res.status(401).json({ error: 'Bitte erneut anmelden.' });
   res.json({ user });
 });
-
-// Admin Password Verification
+app.post('/api/auth/logout', (req, res) => {
+  for (const token of [req.cookies.auth_token, req.cookies.admin_token])
+    if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  res.clearCookie('auth_token', { path: '/' });
+  res.clearCookie('admin_token', { path: '/' });
+  res.json({ success: true });
+});
+let failedAdminAttempts = 0;
+let adminRetryAt = 0;
 app.post('/api/admin/auth', (req, res) => {
-  const { password, userId } = req.body;
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'casaxx';
-
-  if (password === ADMIN_PASSWORD) {
-    if (userId) {
-      db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(userId);
-    }
-    return res.json({ success: true, message: 'Admin-Bereich freigeschaltet' });
+  if (Date.now() < adminRetryAt) return res.status(429).json({ error: 'Zu viele Versuche. Bitte in einer Minute erneut versuchen.' });
+  if (req.body.password !== ADMIN_PASSWORD) {
+    if (++failedAdminAttempts >= 10) { adminRetryAt = Date.now() + 60000; failedAdminAttempts = 0; }
+    return res.status(401).json({ error: 'Falsches Admin-Passwort.' });
   }
-
-  return res.status(401).json({ error: 'Falsches Admin-Passwort!' });
+  failedAdminAttempts = 0;
+  const token = createSession(null, true);
+  res.cookie('admin_token', token, cookieOptions(8 * 3600000));
+  res.json({ success: true });
+});
+app.use('/api/admin', (req, res, next) => {
+  if (!isAdmin(req)) return res.status(401).json({ error: 'Admin-Sitzung abgelaufen. Bitte erneut entsperren.' });
+  next();
+});
+function validateSlide(s) {
+  if (!s || typeof s !== 'object' || !['info','transit','action','multiple_choice','estimation'].includes(s.type) || typeof s.title !== 'string' || !s.title.trim() || s.title.length > 200) return 'Titel und gültigen Folientyp angeben.';
+  if (s.id !== undefined && (typeof s.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(s.id))) return 'Ungültige Folien-ID.';
+  for (const key of ['description','location_name','meeting_time','question','admin_notes'])
+    if (s[key] != null && (typeof s[key] !== 'string' || s[key].length > 20000)) return 'Ungültiges Textfeld: ' + key;
+  for (const key of ['media_url','audio_url']) {
+    if (s[key] != null && s[key] !== '') {
+      if (typeof s[key] !== 'string' || !/^(https?:\/\/|\/(?!\/))[^\s<>"']+$/i.test(s[key])) return 'Medien benötigen eine HTTP(S)-Adresse oder einen Upload-Pfad.';
+    }
+  }
+  for (const [key,min,max] of [['max_points',0,100000],['countdown_seconds',1,3600],['tolerance',0,1e9],['scale_factor',0,1e9],['latitude',-90,90],['longitude',-180,180]])
+    if (s[key] != null && s[key] !== '' && (typeof s[key] !== 'number' || !Number.isFinite(s[key]) || s[key] < min || s[key] > max)) return 'Ungültiger Wert: ' + key;
+  if (s.type === 'multiple_choice' && (!Array.isArray(s.options) || s.options.length < 2 || s.options.length > 6 || s.options.some(o => typeof o !== 'string' || !o.trim() || o.length > 1000) || !Number.isInteger(s.correct_option_index) || s.correct_option_index < 0 || s.correct_option_index >= s.options.length)) return 'Mindestens zwei Antworten und eine gültige richtige Antwort angeben.';
+  if (s.type === 'estimation' && (typeof s.target_value !== 'number' || !Number.isFinite(s.target_value))) return 'Gültigen Zielwert für die Schätzfrage angeben.';
+  return null;
+}
+app.use('/api/admin', (req, res, next) => {
+  if ((req.method === 'POST' && req.path === '/slides') || (req.method === 'PUT' && req.path.startsWith('/slides/'))) {
+    const error = validateSlide(req.body);
+    if (error) return res.status(400).json({ error });
+  }
+  if (req.method === 'POST' && req.path === '/tour/import') {
+    const slides = req.body.tour_data?.slides;
+    if (!Array.isArray(slides) || slides.length > 1000) return res.status(400).json({ error: 'Ungültige Tourdatei.' });
+    const ids = new Set();
+    for (const slide of slides) {
+      if (slide.options === undefined && typeof slide.options_json === 'string') {
+        try { slide.options = JSON.parse(slide.options_json); } catch { return res.status(400).json({ error: 'Ungültige Antwortoptionen.' }); }
+      }
+      const error = validateSlide(slide);
+      if (error || (slide.id && ids.has(slide.id))) return res.status(400).json({ error: error || 'Doppelte Folien-ID.' });
+      ids.add(slide.id);
+    }
+  }
+  next();
+});
+app.post('/api/admin/logout', (req, res) => {
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(req.cookies.admin_token);
+  res.clearCookie('admin_token', { path: '/' });
+  res.json({ success: true });
 });
 
 // App State
 app.get('/api/state', (req, res) => {
-  const userId = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.auth_token;
-  const state = getFullAppState(userId);
+  const userId = playerId(req);
+  const state = getFullAppState(userId, isAdmin(req));
   res.json(state);
 });
 
 // All Slides (for Cache & Studio)
 app.get('/api/slides', (req, res) => {
   const slides = db.prepare('SELECT * FROM slides ORDER BY order_index ASC').all();
-  const parsedSlides = slides.map(s => ({
-    ...s,
-    options: s.options_json ? JSON.parse(s.options_json) : []
-  }));
+  const parsedSlides = slides.map(s => publicSlide(s, isAdmin(req)));
   res.json(parsedSlides);
 });
 
@@ -369,10 +411,7 @@ app.get('/api/slides/:id', (req, res) => {
   if (!slide) {
     return res.status(404).json({ error: 'Folie nicht gefunden' });
   }
-  res.json({
-    ...slide,
-    options: slide.options_json ? JSON.parse(slide.options_json) : []
-  });
+  res.json(publicSlide(slide, isAdmin(req)));
 });
 
 // Content Version (for Cache-First check)
@@ -391,7 +430,7 @@ const routeCache = new Map();
 
 app.get('/api/route', async (req, res) => {
   const { coords } = req.query;
-  if (!coords) {
+  if (typeof coords !== 'string' || coords.length > 10000 || !/^[-0-9.,;]+$/.test(coords)) {
     return res.status(400).json({ error: 'coords parameter erforderlich (lng,lat;lng,lat...)' });
   }
 
@@ -401,8 +440,7 @@ app.get('/api/route', async (req, res) => {
 
   // 1. Priorisiere OpenStreetMap Fußgänger-Routing (routed-foot)
   const urls = [
-    `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${coords}?overview=full&geometries=geojson`,
-    `https://router.project-osrm.org/route/v1/foot/${coords}?overview=full&geometries=geojson`
+    `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${coords}?overview=full&geometries=geojson`
   ];
 
   for (const url of urls) {
@@ -414,6 +452,7 @@ app.get('/api/route', async (req, res) => {
       if (response.ok) {
         const data = await response.json();
         if (data.code === 'Ok' && data.routes && data.routes[0]) {
+          if (routeCache.size >= 100) routeCache.delete(routeCache.keys().next().value);
           routeCache.set(coords, data);
           return res.json(data);
         }
@@ -428,7 +467,7 @@ app.get('/api/route', async (req, res) => {
 
 // Submit Quiz Answer
 app.post('/api/submissions', (req, res) => {
-  const userId = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.auth_token || req.body.user_id;
+  const userId = playerId(req);
   if (!userId) {
     return res.status(401).json({ error: 'Nicht angemeldet' });
   }
@@ -444,10 +483,19 @@ app.post('/api/submissions', (req, res) => {
   }
 
   // Submissions are only accepted in Phase 3 and while timer is not expired
-  if (state.phase !== 3 || state.timer_status === 'expired') {
+  if (state.phase !== 3 || state.timer_status !== 'running' || calculateRemainingTimer(state) <= 0) {
     return res.status(400).json({ error: 'Antwortabgabe ist aktuell gesperrt' });
   }
 
+  const slide = db.prepare('SELECT * FROM slides WHERE id = ?').get(slide_id);
+  if (!slide || !['multiple_choice', 'estimation'].includes(slide.type))
+    return res.status(400).json({ error: 'Diese Station hat keine Quizfrage.' });
+  if (slide.type === 'multiple_choice' && (!Number.isInteger(selected_option) || selected_option < 0 || selected_option >= JSON.parse(slide.options_json || '[]').length))
+    return res.status(400).json({ error: 'Bitte eine gültige Antwort wählen.' });
+  if (slide.type === 'estimation' && (typeof numeric_value !== 'number' || !Number.isFinite(numeric_value)))
+    return res.status(400).json({ error: 'Bitte eine gültige Zahl eingeben.' });
+  if (answer_text != null && (typeof answer_text !== 'string' || answer_text.length > 1000))
+    return res.status(400).json({ error: 'Ungültiger Antworttext.' });
   const now = Date.now();
   const subId = uuidv4();
 
@@ -561,11 +609,13 @@ app.post('/api/admin/set-phase', (req, res) => {
   const { phase } = req.body;
   const phaseNum = parseInt(phase, 10);
 
-  if (phaseNum < 1 || phaseNum > 5) {
+  if (!Number.isInteger(phaseNum) || phaseNum < 1 || phaseNum > 5) {
     return res.status(400).json({ error: 'Ungültige Phase (1-5)' });
   }
 
   const state = db.prepare('SELECT * FROM app_state WHERE id = 1').get();
+
+  if (phaseNum !== 3 && activeTimerTimeout) { clearTimeout(activeTimerTimeout); activeTimerTimeout = null; }
 
   // If transitioning to Phase 3 (Timer & Vote), automatically start countdown
   if (phaseNum === 3 && state.current_slide_id) {
@@ -575,7 +625,7 @@ app.post('/api/admin/set-phase', (req, res) => {
   }
 
   // If transitioning to Phase 4 (Auflösung), settle scores & update leaderboard
-  if (phaseNum === 4 && state.current_slide_id) {
+  if (phaseNum >= 4 && state.current_slide_id) {
     stopTimerOnServer();
     settleSlideScores(state.current_slide_id);
   }
@@ -599,7 +649,8 @@ app.post('/api/admin/set-phase', (req, res) => {
 app.post('/api/admin/timer/start', (req, res) => {
   const { duration } = req.body;
   const state = db.prepare('SELECT * FROM app_state WHERE id = 1').get();
-  const dur = duration ? parseInt(duration, 10) : (state.timer_duration || 20);
+  const dur = duration === undefined ? (state.timer_duration || 20) : Number(duration);
+  if (!Number.isInteger(dur) || dur < 1 || dur > 3600) return res.status(400).json({ error: 'Timer: 1 bis 3600 Sekunden.' });
   startTimerOnServer(dur);
   res.json({ success: true, status: 'running', duration: dur });
 });
@@ -654,6 +705,7 @@ app.post('/api/admin/clear-announcement', (req, res) => {
 
 // Reset Rallye / Scores
 app.post('/api/admin/reset-rallye', (req, res) => {
+  if (activeTimerTimeout) { clearTimeout(activeTimerTimeout); activeTimerTimeout = null; }
   const resetTx = db.transaction(() => {
     db.prepare('DELETE FROM quiz_submissions').run();
     db.prepare('UPDATE users SET score = 0').run();
@@ -684,7 +736,7 @@ app.post('/api/admin/reset-rallye', (req, res) => {
 // File Upload API (Base64 Binary Upload)
 app.post('/api/admin/upload', express.json({ limit: '50mb' }), (req, res) => {
   const { filename, filedata } = req.body;
-  if (!filename || !filedata) {
+  if (typeof filename !== 'string' || typeof filedata !== 'string' || !/\.(png|jpe?g|gif|webp|mp3|wav|ogg|m4a|mp4|webm)$/i.test(filename)) {
     return res.status(400).json({ error: 'Dateiname und Daten erforderlich' });
   }
 
@@ -700,7 +752,7 @@ app.post('/api/admin/upload', express.json({ limit: '50mb' }), (req, res) => {
 
     fs.writeFileSync(filePath, Buffer.from(base64Data, 'base64'));
 
-    const fileUrl = `/uploads/${cleanFilename}`;
+    const fileUrl = `${req.originalUrl.startsWith('/family/') ? '/family' : ''}/uploads/${cleanFilename}`;
     res.json({ success: true, url: fileUrl });
   } catch (err) {
     console.error('Upload Error:', err);
@@ -760,7 +812,7 @@ app.post('/api/admin/slides', (req, res) => {
     id, newOrder, type, title, description || null,
     location_name || null, meeting_time || null, media_url || null, audio_url || null, media_type || 'image',
     question || null, options ? JSON.stringify(options) : null, correct_option_index !== undefined ? correct_option_index : null,
-    target_value !== undefined ? target_value : null, tolerance || 10, scale_factor || 100, max_points || 100, countdown_seconds || 20,
+    target_value !== undefined ? target_value : null, tolerance ?? 10, scale_factor ?? 100, max_points ?? 100, countdown_seconds || 20,
     admin_notes || null,
     latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null,
     longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null
@@ -769,6 +821,8 @@ app.post('/api/admin/slides', (req, res) => {
   bumpContentVersion();
   broadcast({ type: 'content_updated' });
 
+  repairSlideState();
+  broadcastState();
   const slide = db.prepare('SELECT * FROM slides WHERE id = ?').get(id);
   res.json({ success: true, slide: { ...slide, options: slide.options_json ? JSON.parse(slide.options_json) : [] } });
 });
@@ -801,7 +855,7 @@ app.put('/api/admin/slides/:id', (req, res) => {
     type, title, description || null,
     location_name || null, meeting_time || null, media_url || null, audio_url || null, media_type || 'image',
     question || null, options ? JSON.stringify(options) : null, correct_option_index !== undefined ? correct_option_index : null,
-    target_value !== undefined ? target_value : null, tolerance || 10, scale_factor || 100, max_points || 100, countdown_seconds || 20,
+    target_value !== undefined ? target_value : null, tolerance ?? 10, scale_factor ?? 100, max_points ?? 100, countdown_seconds || 20,
     admin_notes || null,
     latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null,
     longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null,
@@ -811,7 +865,6 @@ app.put('/api/admin/slides/:id', (req, res) => {
   bumpContentVersion();
   broadcast({ type: 'content_updated' });
   broadcastState();
-
   const updated = db.prepare('SELECT * FROM slides WHERE id = ?').get(id);
   res.json({ success: true, slide: { ...updated, options: updated.options_json ? JSON.parse(updated.options_json) : [] } });
 });
@@ -828,6 +881,7 @@ app.delete('/api/admin/slides/:id', (req, res) => {
     remaining.forEach((s, idx) => updateOrder.run(idx, s.id));
   })();
 
+  repairSlideState();
   bumpContentVersion();
   broadcast({ type: 'content_updated' });
   broadcastState();
@@ -835,10 +889,23 @@ app.delete('/api/admin/slides/:id', (req, res) => {
   res.json({ success: true });
 });
 
+function repairSlideState() {
+  const state = db.prepare('SELECT * FROM app_state WHERE id = 1').get();
+  const slides = db.prepare('SELECT id FROM slides ORDER BY order_index').all();
+  const index = slides.findIndex(s => s.id === state.current_slide_id);
+  if (index < 0) {
+    if (activeTimerTimeout) clearTimeout(activeTimerTimeout);
+    activeTimerTimeout = null;
+    db.prepare("UPDATE app_state SET current_slide_id = ?, current_slide_index = 0, phase = 1, timer_status = 'stopped', timer_start = 0 WHERE id = 1").run(slides[0]?.id || null);
+  } else db.prepare('UPDATE app_state SET current_slide_index = ? WHERE id = 1').run(index);
+  db.prepare('UPDATE users SET score = COALESCE((SELECT SUM(final_points) FROM quiz_submissions WHERE user_id = users.id), 0)').run();
+}
+
 // Slide Studio: Reorder Slides
 app.post('/api/admin/slides/reorder', (req, res) => {
   const { order } = req.body; // Array of slide IDs in desired order
-  if (!Array.isArray(order)) {
+  const slideIds = db.prepare('SELECT id FROM slides').all().map(s => s.id);
+  if (!Array.isArray(order) || order.length !== slideIds.length || new Set(order).size !== slideIds.length || order.some(id => !slideIds.includes(id))) {
     return res.status(400).json({ error: 'Order Array erforderlich' });
   }
 
@@ -849,6 +916,7 @@ app.post('/api/admin/slides/reorder', (req, res) => {
     });
   })();
 
+  repairSlideState();
   bumpContentVersion();
   broadcast({ type: 'content_updated' });
   broadcastState();
@@ -858,6 +926,7 @@ app.post('/api/admin/slides/reorder', (req, res) => {
 
 // Slide Studio: Re-seed sample tour
 app.post('/api/admin/seed-sample', (req, res) => {
+  if (activeTimerTimeout) { clearTimeout(activeTimerTimeout); activeTimerTimeout = null; }
   createAutomaticBackup();
   seedDatabase();
   broadcastState();
@@ -893,6 +962,7 @@ app.get('/api/admin/tour/export', (req, res) => {
 
 // 📤 Admin: Import Full Tour from JSON (Wiederherstellung)
 app.post('/api/admin/tour/import', (req, res) => {
+  if (activeTimerTimeout) { clearTimeout(activeTimerTimeout); activeTimerTimeout = null; }
   try {
     const { tour_data } = req.body;
     if (!tour_data || !Array.isArray(tour_data.slides)) {
@@ -922,6 +992,7 @@ app.post('/api/admin/tour/import', (req, res) => {
       // Lösche vorherige Folien
       db.prepare('DELETE FROM quiz_submissions').run();
       db.prepare('DELETE FROM slides').run();
+      db.prepare('UPDATE users SET score = 0').run();
 
       tour_data.slides.forEach((s, idx) => {
         const slideId = s.id || uuidv4();
@@ -978,64 +1049,7 @@ app.post('/api/admin/tour/import', (req, res) => {
   }
 });
 
-// Admin: Upload Media / Files
-app.post('/api/admin/upload', (req, res) => {
-  try {
-    const { filename, filedata } = req.body;
-    if (!filedata) {
-      return res.status(400).json({ error: 'Keine Dateidaten empfangen' });
-    }
-
-    const uploadsDir = path.join(__dirname, 'public', 'uploads');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-
-    let buffer;
-    let ext = 'bin';
-
-    // Parse data URL prefix (e.g. data:image/png;base64,....)
-    const matches = filedata.match(/^data:([A-Za-z-+\/0-9.]+);base64,(.+)$/);
-    if (matches && matches.length === 3) {
-      const mime = matches[1].toLowerCase();
-      buffer = Buffer.from(matches[2], 'base64');
-      
-      if (mime.includes('image/jpeg') || mime.includes('image/jpg')) ext = 'jpg';
-      else if (mime.includes('image/png')) ext = 'png';
-      else if (mime.includes('image/gif')) ext = 'gif';
-      else if (mime.includes('image/webp')) ext = 'webp';
-      else if (mime.includes('image/svg')) ext = 'svg';
-      else if (mime.includes('audio/mpeg') || mime.includes('audio/mp3')) ext = 'mp3';
-      else if (mime.includes('audio/wav')) ext = 'wav';
-      else if (mime.includes('audio/ogg')) ext = 'ogg';
-      else if (mime.includes('audio/m4a') || mime.includes('audio/mp4') || mime.includes('audio/aac')) ext = 'm4a';
-      else if (mime.includes('video/mp4')) ext = 'mp4';
-      else if (mime.includes('video/webm')) ext = 'webm';
-    } else {
-      buffer = Buffer.from(filedata, 'base64');
-    }
-
-    if (filename && filename.includes('.')) {
-      const originalExt = filename.split('.').pop().toLowerCase();
-      if (originalExt && originalExt.length <= 5) {
-        ext = originalExt;
-      }
-    }
-
-    const safeName = `${Date.now()}-${uuidv4().substring(0, 8)}.${ext}`;
-    const filePath = path.join(uploadsDir, safeName);
-
-    fs.writeFileSync(filePath, buffer);
-
-    res.json({
-      success: true,
-      url: `/uploads/${safeName}`
-    });
-  } catch (err) {
-    console.error('Upload Error:', err);
-    res.status(500).json({ error: 'Fehler beim Speichern der Datei: ' + err.message });
-  }
-});
+app.use('/api', (req, res) => res.status(404).json({ error: 'API-Endpunkt nicht gefunden.' }));
 
 // Fallback to index.html for SPA
 app.get('*', (req, res) => {
@@ -1047,7 +1061,8 @@ app.get('*', (req, res) => {
 // ==========================================
 
 wss.on('connection', (ws, req) => {
-  wsClients.set(ws, { userId: null, role: 'player' });
+  const cookies = Object.fromEntries((req.headers.cookie || '').split(';').map(s => s.trim().split('=')));
+  wsClients.set(ws, { userId: null, adminToken: cookies.admin_token });
 
   // Send initial full state immediately
   ws.send(JSON.stringify({
@@ -1063,20 +1078,19 @@ wss.on('connection', (ws, req) => {
       switch (data.type) {
         case 'identify':
         case 'heartbeat': {
-          if (data.userId) {
-            client.userId = data.userId;
-            client.role = data.role || 'player';
+          if (data.token) {
+            client.userId = session(data.token)?.user_id || null;
             wsClients.set(ws, client);
 
             // Update user last seen
-            db.prepare("UPDATE users SET last_seen = datetime('now') WHERE id = ?").run(data.userId);
+            db.prepare("UPDATE users SET last_seen = datetime('now') WHERE id = ?").run(client.userId);
           }
 
           // Reply with heartbeat ack and fresh state
           ws.send(JSON.stringify({
             type: 'heartbeat_ack',
             timestamp: Date.now(),
-            state: getFullAppState(client.userId)
+            state: getFullAppState(client.userId, !!session(client.adminToken, true))
           }));
           break;
         }
@@ -1084,7 +1098,7 @@ wss.on('connection', (ws, req) => {
         case 'request_state': {
           ws.send(JSON.stringify({
             type: 'state_update',
-            state: getFullAppState(client.userId)
+            state: getFullAppState(client.userId, !!session(client.adminToken, true))
           }));
           break;
         }
@@ -1111,6 +1125,17 @@ setInterval(() => {
   }
 }, 15000);
 
+// Recover the countdown after a server restart without extending its deadline.
+const persisted = db.prepare('SELECT * FROM app_state WHERE id = 1').get();
+if (persisted.timer_status === 'running') {
+  const delay = persisted.timer_start + persisted.timer_duration * 1000 - Date.now();
+  if (delay <= 0) expireTimerOnServer();
+  else activeTimerTimeout = setTimeout(expireTimerOnServer, delay);
+}
+app.use((err, req, res, next) => {
+  console.error(err.message);
+  res.status(err.status || 500).json({ error: err.status === 413 ? 'Datei zu groß.' : 'Anfrage konnte nicht verarbeitet werden.' });
+});
 // Start HTTP & WS Server
 server.listen(PORT, () => {
   console.log(`🚀 Familienausflug-Rallye Server läuft auf http://localhost:${PORT}`);

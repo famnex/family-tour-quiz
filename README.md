@@ -1,5 +1,7 @@
 # 🧭 Familienausflug-Rallye Companion App
 
+Voraussetzung für diese geprüfte Version: **Node.js 22**.
+
 Eine reaktive, mobile-optimierte Web-Anwendung (PWA) für geführte Familienausflüge, Stadtrallyes und Sightseeing-Touren mit zentraler Admin-Steuerung, Live-Synchronisation via WebSockets und interaktiven Quiz- und Schätz-Stationen.
 
 ---
@@ -34,7 +36,7 @@ Eine reaktive, mobile-optimierte Web-Anwendung (PWA) für geführte Familienausf
 ## 🚀 Schnellstart
 
 ### Option A: Per Doppelklick unter Windows
-Einfach die Datei **[`start.bat`](file:///c:/Users/fleis/.gemini/antigravity/scratch/family_tour_quiz/start.bat)** doppelklicken. Das Skript:
+Einfach die Datei **[`start.bat`](start.bat)** doppelklicken. Das Skript:
 1. Prüft Node.js & installiert bei Bedarf `npm install`.
 2. Initialisiert die Datenbank automatisch mit der Muster-Tour.
 3. Zeigt die lokale WLAN-IP für Smartphones an.
@@ -55,7 +57,7 @@ npm start
 ```
 
 Die Anwendung ist nun erreichbar unter:
-👉 `http://localhost:3000`
+👉 `http://localhost:5500`
 
 ---
 
@@ -81,11 +83,11 @@ pm2 stop family-tour-quiz
 ## 👥 Verwendung während der Tour
 
 1. **Teilnehmer**:
-   - Öffnen `http://<SERVER-IP>:3000` auf ihren Smartphones.
+   - Öffnen `http://<SERVER-IP>:5500` auf ihren Smartphones.
    - Geben nur ihren Vornamen ein (z. B. "Papa", "Jonas", "Mama"), wählen ein Emoji und klicken auf *"Los geht's"*.
 2. **Admin (Tour-Leiter)**:
    - Klickt oben rechts in der App auf den **👑 Admin-Button**.
-   - Gibt das Admin-Passwort ein: **`casaxx`**.
+   - Gibt das Admin-Passwort ein: **das im Serverfenster angezeigte Passwort** (oder den Wert von `ADMIN_PASSWORD`).
    - Die Admin-Zentrale öffnet sich (Live-Steuerung & Slide Studio).
    - Steuert Folien und schaltet die 5 Phasen schrittweise per Knopfdruck durch.
    - Startet und stoppt den synchronen Countdown.
@@ -103,5 +105,29 @@ npm test
 
 ## 📚 Dokumentation
 
-- [db.md](file:///c:/Users/fleis/.gemini/antigravity/scratch/family_tour_quiz/db.md): Ausführliche Dokumentation der SQLite-Datenbanktabellen und Felder.
-- [docs/ARCHITECTURE.md](file:///c:/Users/fleis/.gemini/antigravity/scratch/family_tour_quiz/docs/ARCHITECTURE.md): Systemarchitektur, Protokolle und Punkteberechnungs-Algorithmus.
+- [db.md](db.md): Ausführliche Dokumentation der SQLite-Datenbanktabellen und Felder.
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): Systemarchitektur, Protokolle und Punkteberechnungs-Algorithmus.
+
+
+## Änderungen in dieser Überarbeitung
+
+Siehe [REVIEW.md](REVIEW.md) für Fehler, Korrekturen, Tests und priorisierte Ausbauideen.
+
+### Admin-Zugang und bestehende Installationen
+
+Ohne `ADMIN_PASSWORD` erzeugt der Server bei jedem Start ein zufälliges Passwort und zeigt es im Serverfenster an. Für einen festen Zugang vor dem Start `ADMIN_PASSWORD` als Umgebungsvariable setzen (unter PM2 in der lokalen Umgebung, nicht öffentlich ins Repository schreiben). Die Admin-Sitzung gilt acht Stunden. „Sperren“ widerruft sie serverseitig; „Beenden“ schließt nur die Ansicht.
+
+Unter HTTPS `COOKIE_SECURE=true` setzen. Für lokale HTTP-Tests weglassen. Die Anwendung läuft standardmäßig auf Port 5500. Der Reverse Proxy muss WebSocket-Upgrades weiterleiten. PM2 weiterhin mit einer Instanz betreiben.
+
+Spielersitzungen benutzen jetzt separate Tokens. Alte Anmeldungen werden dadurch ungültig; ein bereits belegter Name wird nicht mehr automatisch übernommen. Vor einer neuen Tour kann die Tourleitung alte Teilnehmer entfernen, oder der Spieler verwendet einen unterscheidbaren Namen. Bestehende Tourinhalte bleiben erhalten. Vor dem Austausch der Anwendung den Server stoppen und `data/` sowie `public/uploads/` sichern und beibehalten. `npm run seed` ersetzt die Tour durch Beispieldaten und gehört nicht in einen Updateablauf.
+
+### Lokaler Start unter Linux/macOS
+
+```sh
+npm ci
+# Nur bei einer neuen Installation für Beispieldaten:
+npm run seed
+npm start
+```
+
+Auf Windows `start.bat` verwenden. Installation der Abhängigkeiten benötigt Internet. Karten und externe Medien benötigen ebenfalls Internet; Live-Abgaben benötigen immer eine Verbindung zum Rallye-Server. Der Service Worker speichert die App-Oberfläche und bereits geladene eigene Medien, keine vollständige Offline-Spielrunde.

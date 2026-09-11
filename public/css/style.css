@@ -1846,3 +1846,56 @@ main {
   from { transform: scale(0.92); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+
+/* 1.6: readable outdoor controls and a calmer adventure identity. */
+:root { --text-muted: #b0bdd0; --primary: #777bfa; --radius-lg: 24px; }
+body { background: radial-gradient(ellipse at 10% 0%, #152d3d 0, transparent 50%), #090e19; }
+.tour-welcome { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 24px; }
+.eyebrow { color: #6ee7c3; letter-spacing: .16em; font-size: .7rem; font-weight: 800; }
+.tour-welcome h2 { font-size: clamp(1.4rem, 3vw, 2rem); letter-spacing: -.04em; margin-top: 6px; }
+.live-label { color: var(--text-muted); font-size: .78rem; }
+.tour-progress { flex-basis: 100%; display: flex; align-items: center; gap: 16px; font-size: .78rem; color: var(--text-muted); }
+.tour-progress-track { flex: 1; height: 5px; border-radius: 99px; background: #253349; overflow: hidden; }
+#tour-progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, #6ee7c3, #8b91ff); transition: width .4s; border-radius: inherit; }
+.slide-stage-card { background: linear-gradient(145deg, #172338, #111a2b); border-color: #344057; box-shadow: 0 16px 48px #0004; }
+.slide-title { letter-spacing: -.035em; line-height: 1.15; text-wrap: balance; }
+.slide-description { line-height: 1.65; }
+.option-btn { min-height: 64px; text-align: left; border-width: 2px; }
+.option-btn.selected { border-color: #6ee7c3; background: #163b38; }
+button, a, input { touch-action: manipulation; }
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, [tabindex]:focus-visible { outline: 3px solid #6ee7c3; outline-offset: 4px; }
+button:disabled { cursor: not-allowed; }
+.icon-btn, .btn-secondary, .btn-danger { min-height: 44px; min-width: 44px; }
+.input-field { font-size: 16px; }
+.estimate-form { display: grid; gap: 12px; }
+.estimate-form label { font-weight: 750; }
+.estimate-form small { color: var(--text-muted); line-height: 1.5; }
+.estimate-input { font-size: 2rem; font-weight: 750; padding: 18px; }
+#est-saved-note { color: #6ee7c3; font-size: .85rem; }
+.toast-message { position: fixed; bottom: calc(90px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 100001; max-width: min(90vw, 520px); width: max-content; padding: 14px 20px; background: #123c33; color: #e9fff7; border: 1px solid #6ee7c3; border-radius: 14px; box-shadow: 0 8px 30px #0008; line-height: 1.5; }
+.toast-error { background: #471e2b; border-color: #fda4af; }
+.modal-content { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.app-footer { padding-bottom: env(safe-area-inset-bottom); }
+.admin-fullscreen-view { height: 100dvh; }
+.stage-grid > *, .header-inner > *, .admin-workspace-body > * { min-width: 0; }
+.user-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+@media (max-width: 600px) {
+  main { padding: 18px 12px 100px; }
+  .tour-welcome { gap: 10px; margin-bottom: 18px; }
+  .live-label { flex-basis: 100%; }
+  .slide-stage-card { padding: 18px; }
+  .stage-header-row { flex-wrap: wrap; gap: 8px; }
+  .header-inner { gap: 8px; padding-left: 12px; padding-right: 12px; }
+  .header-controls { gap: 4px; }
+  .user-name { max-width: 85px; }
+  .phase-stepper-large { gap: 5px; }
+  .phase-step-btn-large { padding: 10px 3px; min-width: 0; }
+  .phase-name { font-size: .66rem; overflow-wrap: anywhere; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}
+/* Keep notices in normal flow; only the profile bar stays at the top. */
+.announcement-bar { position: relative; top: auto; box-shadow: none; }
+.tour-welcome { width: 100%; }
+.media-unavailable { min-height: 96px; display: grid; place-items: center; padding: 20px; color: var(--text-muted); font-size: .85rem; text-align: center; }

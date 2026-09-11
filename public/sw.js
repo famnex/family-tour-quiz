@@ -1,94 +1,23 @@
-const CACHE_NAME = 'family-rallye-v3';
-const CORE_ASSETS = [
-  '/',
-  '/index.html',
-  '/css/style.css',
-  '/js/audioSynth.js',
-  '/js/confetti.js',
-  '/js/odometer.js',
-  '/js/app.js',
-  '/js/admin.js',
-  '/manifest.json'
-];
-
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(CORE_ASSETS);
-    }).then(() => self.skipWaiting())
-  );
-});
-
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('fetch', (event) => {
+const CACHE_PREFIX = 'family-rallye-';
+const CACHE_NAME = CACHE_PREFIX + 'v4-' + new URL(self.registration.scope).pathname;
+const assetUrl = path => new URL(path, self.registration.scope).href;
+const CORE_ASSETS = ['', 'index.html', 'css/style.css', 'js/ui.js', 'js/audioSynth.js', 'js/confetti.js', 'js/odometer.js', 'js/app.js', 'js/admin.js', 'manifest.json'].map(assetUrl);
+self.addEventListener('install', event => event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(CORE_ASSETS)).then(() => self.skipWaiting())));
+self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME && (!key.includes('v4-') || key.endsWith(new URL(self.registration.scope).pathname))).map(key => caches.delete(key)))).then(() => self.clients.claim())));
+self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
-
-  // Skip caching for WebSocket or any API calls completely (direct network)
-  if (url.pathname.includes('/ws') || url.pathname.includes('/api/')) {
-    return;
-  }
-
-  // Network-First for Code assets (HTML, CSS, JS) so code changes load instantly without Ctrl+F5
-  if (
-    url.pathname === '/' ||
-    url.pathname.endsWith('.html') ||
-    url.pathname.startsWith('/css') ||
-    url.pathname.startsWith('/js') ||
-    url.pathname.startsWith('/api/')
-  ) {
-    event.respondWith(
-      fetch(event.request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-        }
-        return networkResponse;
-      }).catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
-  // Media (Images, Audio, Video, Uploads) Cache-First to save mobile bandwidth
-  if (
-    url.hostname.includes('images.unsplash.com') ||
-    url.pathname.match(/\.(png|jpg|jpeg|svg|webp|mp3|wav|ogg|mp4)$/) ||
-    url.pathname.startsWith('/uploads')
-  ) {
-    event.respondWith(
-      caches.open(CACHE_NAME).then(async (cache) => {
-        const cachedResponse = await cache.match(event.request);
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-        try {
-          const networkResponse = await fetch(event.request);
-          if (networkResponse && networkResponse.status === 200) {
-            cache.put(event.request, networkResponse.clone());
-          }
-          return networkResponse;
-        } catch (e) {
-          return cachedResponse || Response.error();
-        }
-      })
-    );
-    return;
-  }
-
-  // Fallback
-  event.respondWith(
-    fetch(event.request).catch(() => caches.match(event.request))
-  );
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.includes('/api/') || event.request.headers.has('range')) return;
+  event.respondWith((async () => {
+    const cache = await caches.open(CACHE_NAME);
+    const isCode = event.request.mode === 'navigate' || /\.(css|js|html|json)$/.test(url.pathname);
+    const cached = await cache.match(event.request, { ignoreSearch: true });
+    if (cached && !isCode) return cached;
+    try {
+      const response = await fetch(event.request);
+      if (response.ok && response.status === 200) await cache.put(event.request, response.clone());
+      return response;
+    } catch {
+      return cached || (event.request.mode === 'navigate' && await cache.match(assetUrl('index.html'))) || Response.error();
+    }
+  })());
 });

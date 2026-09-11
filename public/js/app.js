@@ -29,13 +29,9 @@ class RallyeApp {
     this.initOdometer();
     this.bindEvents();
 
-    // Unregister legacy ServiceWorker to avoid stale subpath cache
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(registrations => {
-        for (const reg of registrations) {
-          reg.unregister().catch(() => {});
-        }
-      }).catch(() => {});
+      navigator.serviceWorker.register(window.apiUrl('/sw.js'), { scope: window.apiUrl('/') })
+        .catch(e => console.warn('Offline-Cache nicht verfügbar:', e));
     }
 
     if (window.admin) {
@@ -141,7 +137,8 @@ class RallyeApp {
     }
   }
 
-  logout() {
+  async logout() {
+    await fetch(window.apiUrl('/api/auth/logout'), { method: 'POST' });
     localStorage.removeItem('rallye_auth_token');
     localStorage.removeItem('rallye_username');
     localStorage.removeItem('rallye_user_emoji');
@@ -149,6 +146,9 @@ class RallyeApp {
     sessionStorage.removeItem('rallye_admin_unlocked');
     this.user = null;
     this.token = null;
+    this.localSubmissions = {};
+    this.currentEstSlideId = null;
+    if (this.ws) this.ws.close();
 
     const nameEl = document.getElementById('user-display-name');
     if (nameEl) nameEl.textContent = 'Gast';
@@ -173,7 +173,7 @@ class RallyeApp {
         if (res.ok) {
           const data = await res.json();
           this.user = data.user;
-          this.token = this.user.id;
+          this.token = savedToken;
           localStorage.setItem('rallye_auth_token', this.token);
           this.onAuthenticated();
           return;
@@ -286,6 +286,11 @@ class RallyeApp {
       if (res.ok) {
         const state = await res.json();
         this.state = state;
+    this.serverOffset = state.server_time ? state.server_time - Date.now() : 0;
+    const progress = document.getElementById('tour-progress-fill');
+    if (progress) progress.style.width = `${state.total_slides ? ((state.current_slide_index + 1) / state.total_slides) * 100 : 0}%`;
+    const label = document.getElementById('tour-progress-label');
+    if (label) label.textContent = state.total_slides ? `Station ${state.current_slide_index + 1} von ${state.total_slides}` : 'Die Tour wird vorbereitet';
         this.renderState(state);
         if (window.admin && typeof window.admin.updateFromState === 'function') {
           window.admin.updateFromState(state);
@@ -309,7 +314,7 @@ class RallyeApp {
 
     try {
       if (this.ws) {
-        try { this.ws.close(); } catch (e) {}
+        try { this.ws.onclose = null; this.ws.close(); } catch (e) {}
       }
 
       this.ws = new WebSocket(wsUrl);
@@ -324,7 +329,7 @@ class RallyeApp {
 
         this.ws.send(JSON.stringify({
           type: 'identify',
-          userId: this.user?.id,
+          token: this.token,
           role: this.user?.role
         }));
       };
@@ -364,6 +369,8 @@ class RallyeApp {
   }
 
   setConnectionStatus(online) {
+    const status = document.getElementById('live-connection-label');
+    if (status) status.textContent = online ? 'Live verbunden' : 'Verbindung wird wiederhergestellt …';
     const dot = document.getElementById('connection-status-dot');
     if (dot) {
       dot.className = online ? 'connection-dot' : 'connection-dot offline';
@@ -375,7 +382,7 @@ class RallyeApp {
     if (this.ws && this.ws.readyState === WebSocket.OPEN && this.user) {
       this.ws.send(JSON.stringify({
         type: 'heartbeat',
-        userId: this.user.id
+        token: this.token
       }));
     }
   }
@@ -428,6 +435,11 @@ class RallyeApp {
   renderState(state) {
     if (!state) return;
     this.state = state;
+    this.serverOffset = state.server_time ? state.server_time - Date.now() : 0;
+    const progress = document.getElementById('tour-progress-fill');
+    if (progress) progress.style.width = `${state.total_slides ? ((state.current_slide_index + 1) / state.total_slides) * 100 : 0}%`;
+    const label = document.getElementById('tour-progress-label');
+    if (label) label.textContent = state.total_slides ? `Station ${state.current_slide_index + 1} von ${state.total_slides}` : 'Die Tour wird vorbereitet';
 
     if (this.lastPhase !== state.phase) {
       if (state.phase !== 4 && state.phase !== 5) {
@@ -530,7 +542,9 @@ class RallyeApp {
     if (mediaContainer) {
       if (isNewSlide || !mediaContainer.dataset.renderedSlideId || mediaContainer.dataset.renderedSlideId !== slide.id) {
         mediaContainer.dataset.renderedSlideId = slide.id;
+        mediaContainer.onclick = null;
         mediaContainer.innerHTML = '';
+        mediaContainer.classList.remove('media-unavailable');
 
         const mediaType = slide.media_type || 'image';
         const hasMedia = !!(slide.media_url || slide.audio_url);
@@ -542,33 +556,33 @@ class RallyeApp {
 
           if (mediaType === 'video') {
             mediaContainer.innerHTML = `
-              <video id="active-media-player" src="${slide.media_url}" controls playsinline style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);"></video>
+              <video id="active-media-player" src="${window.escapeHtml(slide.media_url)}" controls playsinline style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);"></video>
             `;
           } else if (mediaType === 'audio') {
             mediaContainer.innerHTML = `
               <div style="padding: 12px; text-align: center; background: #0f172a; border-radius: var(--radius-md);">
                 <div style="font-size: 1.8rem; margin-bottom: 4px;">🎵</div>
                 <p style="font-weight: 800; color: #38bdf8; font-size: 0.85rem; margin-bottom: 6px;">Audio-Guide</p>
-                <audio id="active-media-player" src="${slide.media_url}" controls style="width: 100%; height: 32px;"></audio>
+                <audio id="active-media-player" src="${window.escapeHtml(slide.media_url)}" controls style="width: 100%; height: 32px;"></audio>
               </div>
             `;
           } else if (mediaType === 'image_and_audio') {
             mediaContainer.innerHTML = `
               <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
-                <div style="position: relative; height: 85px; width: 100%; cursor: pointer;" onclick="window.app.openImageLightbox('${slide.media_url}')">
-                  <img src="${slide.media_url}" alt="Station Bild" loading="lazy" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);">
+                <div style="position: relative; height: 85px; width: 100%; cursor: pointer;" data-lightbox-image>
+                  <img src="${window.escapeHtml(slide.media_url)}" alt="Station Bild" loading="lazy" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);">
                   <div class="media-zoom-badge">🔍 Bild vergrößern</div>
                 </div>
                 <div style="background: rgba(15, 23, 42, 0.9); padding: 6px 10px; border-radius: var(--radius-sm); border: 1px solid rgba(56, 189, 248, 0.3);">
                   <small style="color: #38bdf8; font-weight: 800; display: block; margin-bottom: 2px;">🎵 Audio-Begleitung</small>
-                  <audio id="active-media-player" src="${slide.audio_url || slide.media_url}" controls style="width: 100%; height: 28px;"></audio>
+                  <audio id="active-media-player" src="${window.escapeHtml(slide.audio_url || slide.media_url)}" controls style="width: 100%; height: 28px;"></audio>
                 </div>
               </div>
             `;
           } else {
             // Default Image - Compact Thumbnail with Zoom Click
             mediaContainer.innerHTML = `
-              <img id="slide-media-img" src="${slide.media_url}" alt="Station Media" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">
+              <img id="slide-media-img" src="${window.escapeHtml(slide.media_url)}" alt="Station Media" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;">
               <div class="media-zoom-badge">🔍 Bild vergrößern</div>
             `;
             mediaContainer.onclick = () => this.openImageLightbox(slide.media_url);
@@ -576,6 +590,15 @@ class RallyeApp {
         }
       }
     }
+
+    const stationImage = mediaContainer?.querySelector('img');
+    if (stationImage) stationImage.onerror = () => {
+      mediaContainer.textContent = 'Bild gerade nicht verfügbar. Die Frage kannst du trotzdem beantworten.';
+      mediaContainer.classList.add('media-unavailable');
+      mediaContainer.onclick = null;
+    };
+    const lightboxTarget = mediaContainer?.querySelector('[data-lightbox-image]');
+    if (lightboxTarget) lightboxTarget.onclick = () => this.openImageLightbox(slide.media_url);
 
     // Participant Mini-Map & Navigation for Info & Transit Slides with GPS
     const mapBox = document.getElementById('slide-map-box');
@@ -692,12 +715,14 @@ class RallyeApp {
     estimationContainer.classList.add('hidden');
     resultBanner.classList.add('hidden');
 
-    const userSubmission = state.user_submission || (slide ? this.localSubmissions[slide.id] : null);
+    const userSubmission = state.user_submission;
 
     if (state.phase === 1) {
-      lockNotice.classList.add('hidden');
+      lockNotice.textContent = 'Lies die Frage in Ruhe. Die Tourleitung blendet gleich die Antworten ein.';
+      lockNotice.classList.remove('hidden');
     } else if (state.phase === 2) {
-      lockNotice.classList.add('hidden');
+      lockNotice.textContent = 'Gleich geht’s los! Antworten sind möglich, sobald der Countdown startet.';
+      lockNotice.classList.remove('hidden');
 
       if (slide.type === 'multiple_choice') {
         optionsGrid.classList.remove('hidden');
@@ -708,7 +733,7 @@ class RallyeApp {
     } else if (state.phase === 3) {
       timerContainer.classList.remove('hidden');
 
-      const isInputLocked = state.timer.status === 'expired' || state.timer.remaining <= 0;
+      const isInputLocked = state.timer.status !== 'running' || state.timer.remaining <= 0;
 
       if (slide.type === 'multiple_choice') {
         optionsGrid.classList.remove('hidden');
@@ -757,7 +782,7 @@ class RallyeApp {
 
       btn.innerHTML = `
         <span class="option-letter">${letters[idx] || (idx + 1)}</span>
-        <span style="flex: 1;">${optText}</span>
+        <span style="flex: 1;">${window.escapeHtml(optText)}</span>
         ${isReveal ? '<span style="color: #10b981; font-weight: 800; font-size: 0.85rem;">✓ Richtige Antwort</span>' : (isSelected ? '<span style="font-size: 1.2rem;">✓</span>' : '')}
       `;
 
@@ -774,102 +799,35 @@ class RallyeApp {
 
   renderEstimationInput(slide, isInteractive, userSubmission, isReveal = false) {
     const container = document.getElementById('estimation-container');
-    
-    // Sync local input buffer
-    if (this.currentEstSlideId !== slide.id) {
+    // Keep the real input mounted during heartbeats, so keyboard and caret stay put.
+    if (this.currentEstSlideId !== slide.id || !document.getElementById('est-number-input')) {
       this.currentEstSlideId = slide.id;
-      this.currentEstValue = (userSubmission?.numeric_value !== null && userSubmission?.numeric_value !== undefined) ? String(userSubmission.numeric_value) : '';
-    } else if (userSubmission && !this.currentEstValue && userSubmission.numeric_value !== null && userSubmission.numeric_value !== undefined) {
-      this.currentEstValue = String(userSubmission.numeric_value);
-    }
-
-    const displayVal = this.currentEstValue || (userSubmission?.numeric_value !== null && userSubmission?.numeric_value !== undefined ? String(userSubmission.numeric_value) : '');
-
-    container.innerHTML = `
-      <div class="numpad-container">
-        <div class="numpad-display-box" id="est-display-box">
-          ${displayVal ? `<span class="numpad-display-val">${displayVal}</span>` : `<span class="numpad-placeholder">Zahl eintippen...</span>`}
-        </div>
-
-        <div class="numpad-grid">
-          <button type="button" class="numpad-btn" data-key="1" ${!isInteractive ? 'disabled' : ''}>1</button>
-          <button type="button" class="numpad-btn" data-key="2" ${!isInteractive ? 'disabled' : ''}>2</button>
-          <button type="button" class="numpad-btn" data-key="3" ${!isInteractive ? 'disabled' : ''}>3</button>
-
-          <button type="button" class="numpad-btn" data-key="4" ${!isInteractive ? 'disabled' : ''}>4</button>
-          <button type="button" class="numpad-btn" data-key="5" ${!isInteractive ? 'disabled' : ''}>5</button>
-          <button type="button" class="numpad-btn" data-key="6" ${!isInteractive ? 'disabled' : ''}>6</button>
-
-          <button type="button" class="numpad-btn" data-key="7" ${!isInteractive ? 'disabled' : ''}>7</button>
-          <button type="button" class="numpad-btn" data-key="8" ${!isInteractive ? 'disabled' : ''}>8</button>
-          <button type="button" class="numpad-btn" data-key="9" ${!isInteractive ? 'disabled' : ''}>9</button>
-
-          <button type="button" class="numpad-btn numpad-fn-btn" data-key="C" ${!isInteractive ? 'disabled' : ''}>C</button>
-          <button type="button" class="numpad-btn" data-key="0" ${!isInteractive ? 'disabled' : ''}>0</button>
-          <button type="button" class="numpad-btn numpad-fn-btn" data-key="BACK" ${!isInteractive ? 'disabled' : ''}>⌫</button>
-        </div>
-
-        <button type="button" class="submit-btn numpad-submit-btn" id="est-submit-btn" ${!isInteractive ? 'disabled' : ''}>
-          ${userSubmission ? '✓ Tipp eingeloggt (Ändern)' : '🚀 Tipp einloggen!'}
-        </button>
-      </div>
-    `;
-
-    if (isInteractive) {
-      container.querySelectorAll('.numpad-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          const key = btn.dataset.key;
-          if (key === 'C') {
-            this.currentEstValue = '';
-          } else if (key === 'BACK') {
-            this.currentEstValue = this.currentEstValue.slice(0, -1);
-          } else if (key >= '0' && key <= '9') {
-            if (this.currentEstValue.length < 8) {
-              this.currentEstValue += key;
-            }
-          }
-
-          if (window.soundFx) window.soundFx.playClick();
-
-          const box = document.getElementById('est-display-box');
-          if (box) {
-            box.innerHTML = this.currentEstValue
-              ? `<span class="numpad-display-val">${this.currentEstValue}</span>`
-              : `<span class="numpad-placeholder">Zahl eintippen...</span>`;
-          }
-
-          // Auto-save typed estimation in background so it's always registered on timer expiration / slide change!
-          const parsedVal = parseFloat(this.currentEstValue);
-          if (this.estDebounceTimer) clearTimeout(this.estDebounceTimer);
-
-          const submitBtn = document.getElementById('est-submit-btn');
-          if (!isNaN(parsedVal)) {
-            if (submitBtn) submitBtn.innerHTML = `✓ Tipp eingeloggt: <strong>${parsedVal}</strong>`;
-            this.estDebounceTimer = setTimeout(() => {
-              this.submitEstimation(slide.id, parsedVal, true);
-            }, 300);
-          } else {
-            if (submitBtn) submitBtn.innerHTML = `🚀 Tipp einloggen!`;
-          }
-        });
-      });
-
-      document.getElementById('est-submit-btn')?.addEventListener('click', (e) => {
+      container.innerHTML = `
+        <form id="est-answer-form" class="estimate-form">
+          <label for="est-number-input">Deine Schätzung</label>
+          <input id="est-number-input" class="input-field estimate-input" type="text" inputmode="decimal" autocomplete="off" maxlength="16" placeholder="Zahl eingeben">
+          <small>Dezimalzahlen mit Komma oder Punkt sind möglich. Erst mit „Tipp abgeben“ wird gespeichert.</small>
+          <button class="submit-btn" id="est-submit-btn" type="submit">Tipp abgeben →</button>
+          <p id="est-saved-note" role="status"></p>
+        </form>`;
+      document.getElementById('est-number-input').value = userSubmission?.numeric_value ?? '';
+      document.getElementById('est-answer-form').addEventListener('submit', e => {
         e.preventDefault();
-        if (this.estDebounceTimer) clearTimeout(this.estDebounceTimer);
-        const val = parseFloat(this.currentEstValue);
-        if (!isNaN(val)) {
-          if (window.soundFx) window.soundFx.playClick();
-          this.submitEstimation(slide.id, val, false);
-        } else {
-          alert('Bitte tippe zuerst eine Zahl ein!');
-        }
+        const raw = document.getElementById('est-number-input').value.trim().replace(',', '.');
+        if (!raw || !Number.isFinite(Number(raw))) return window.showToast('Bitte eine gültige Zahl eingeben.', true);
+        this.submitEstimation(slide.id, Number(raw));
       });
     }
+    document.getElementById('est-number-input').disabled = !isInteractive;
+    document.getElementById('est-submit-btn').disabled = !isInteractive || !!this.submissionPending;
+    document.getElementById('est-saved-note').textContent = userSubmission
+      ? `✓ Gespeichert: ${userSubmission.numeric_value}. Änderungen bitte erneut abgeben.`
+      : 'Noch kein Tipp abgegeben.';
   }
 
   async submitMultipleChoice(slideId, optionIndex, text) {
+    if (this.submissionPending) return;
+    this.submissionPending = true;
     try {
       const res = await fetch(window.apiUrl('/api/submissions'), {
         method: 'POST',
@@ -884,18 +842,22 @@ class RallyeApp {
         })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Antwort konnte nicht gespeichert werden.");
       if (data.success && data.submission) {
         this.localSubmissions[slideId] = data.submission;
-        if (this.state) this.state.user_submission = data.submission;
-        this.renderMultipleChoiceOptions(this.state.current_slide, true, data.submission, false);
+        if (this.state?.current_slide?.id !== slideId) return;
+        this.state.user_submission = data.submission;
+        this.renderQuizPhase(this.state);
+        window.showToast('Antwort gespeichert ✓');
       }
     } catch (e) {
-      console.error(e);
-    }
+      window.showToast(e.message || 'Keine Verbindung. Bitte erneut versuchen.', true);
+    } finally { this.submissionPending = false; }
   }
 
   async submitEstimation(slideId, numberVal, isBackground = false) {
-    if (isNaN(numberVal)) return;
+    if (!Number.isFinite(numberVal) || this.submissionPending) return;
+    this.submissionPending = true;
     try {
       const res = await fetch(window.apiUrl('/api/submissions'), {
         method: 'POST',
@@ -910,24 +872,31 @@ class RallyeApp {
         })
       });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Antwort konnte nicht gespeichert werden.");
       if (data.success && data.submission) {
         this.localSubmissions[slideId] = data.submission;
-        if (this.state) this.state.user_submission = data.submission;
+        if (this.state?.current_slide?.id !== slideId) return;
+        this.state.user_submission = data.submission;
         
         const submitBtn = document.getElementById('est-submit-btn');
         if (submitBtn) {
-          submitBtn.innerHTML = `✓ Tipp eingeloggt: <strong>${numberVal}</strong>`;
+          submitBtn.textContent = 'Tipp aktualisieren →';
+          document.getElementById('est-saved-note').textContent = `✓ Gespeichert: ${numberVal}`;
+          window.showToast('Tipp gespeichert ✓');
         }
       }
     } catch (e) {
-      console.error('Estimation submission error', e);
+      window.showToast(e.message || 'Keine Verbindung. Bitte erneut versuchen.', true);
+    } finally {
+      this.submissionPending = false;
+      if (this.state?.current_slide?.id === slideId) this.renderQuizPhase(this.state);
     }
   }
 
   renderPhase4Results(state) {
     const resultBanner = document.getElementById('result-banner');
     const slide = state.current_slide;
-    const mySub = state.user_submission || (slide ? this.localSubmissions[slide.id] : null);
+    const mySub = state.user_submission;
 
     resultBanner.classList.remove('hidden');
 
@@ -1032,9 +1001,9 @@ class RallyeApp {
         <div class="rank-left">
           <span class="rank-pos">${medal}</span>
           <div class="avatar-circle" style="background-color: ${player.avatar_color};">
-            ${player.avatar_emoji}
+            ${window.escapeHtml(player.avatar_emoji)}
           </div>
-          <span class="user-name">${player.name} ${isMe ? '(Du)' : ''}</span>
+          <span class="user-name">${window.escapeHtml(player.name)} ${isMe ? '(Du)' : ''}</span>
         </div>
         <span class="rank-score">${player.score}</span>
       `;
@@ -1066,9 +1035,9 @@ class RallyeApp {
         <div class="rank-left">
           <span class="rank-pos">${medal}</span>
           <div class="avatar-circle" style="background-color: ${player.avatar_color};">
-            ${player.avatar_emoji}
+            ${window.escapeHtml(player.avatar_emoji)}
           </div>
-          <span class="user-name">${player.name} ${isMe ? '(Du)' : ''}</span>
+          <span class="user-name">${window.escapeHtml(player.name)} ${isMe ? '(Du)' : ''}</span>
         </div>
         <span class="rank-score">${player.score}</span>
       `;
@@ -1166,7 +1135,7 @@ class RallyeApp {
 
     if (!timer || timer.status !== 'running' || !timer.start) {
       if (timerBadge) {
-        timerBadge.textContent = '⏱️ --s';
+        timerBadge.textContent = timer?.status === 'expired' ? 'Zeit abgelaufen' : 'Antwortabgabe gestoppt';
         timerBadge.classList.remove('urgent');
       }
       if (timerProgress) timerProgress.style.width = '0%';
@@ -1177,7 +1146,7 @@ class RallyeApp {
     const startTime = timer.start;
 
     const updateTick = () => {
-      const elapsed = (Date.now() - startTime) / 1000;
+      const elapsed = ((Date.now() + (this.serverOffset || 0)) - startTime) / 1000;
       const remaining = Math.max(0, Math.ceil(duration - elapsed));
       const pct = Math.max(0, Math.min(100, (remaining / duration) * 100));
 
@@ -1199,12 +1168,6 @@ class RallyeApp {
       if (remaining <= 0) {
         clearInterval(this.timerInterval);
         this.timerInterval = null;
-
-        // Auto-submit typed estimation before timer lock
-        if (this.currentEstValue && !isNaN(parseFloat(this.currentEstValue)) && this.state?.current_slide?.type === 'estimation') {
-          if (this.estDebounceTimer) clearTimeout(this.estDebounceTimer);
-          this.submitEstimation(this.state.current_slide.id, parseFloat(this.currentEstValue), true);
-        }
 
         if (this.state && this.state.phase === 3) {
           this.renderQuizPhase({ ...this.state, timer: { ...timer, status: 'expired', remaining: 0 } });

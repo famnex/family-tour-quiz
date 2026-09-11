@@ -1,3 +1,4 @@
+process.env.DB_PATH = require('path').join(require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'rallye-unit-')), 'test.db');
 const assert = require('assert');
 const http = require('http');
 const { db } = require('../src/db');

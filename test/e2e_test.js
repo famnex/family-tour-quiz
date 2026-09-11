@@ -2,6 +2,9 @@ const assert = require('assert');
 const { spawn } = require('child_process');
 const http = require('http');
 const { WebSocket } = require('ws');
+let adminCookie = '';
+const testDir = require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'rallye-e2e-'));
+const testEnv = { ...process.env, PORT: '3333', ADMIN_PASSWORD: 'test-only-password', DB_PATH: require('path').join(testDir, 'test.db') };
 
 function request(url, options = {}, data = null) {
   return new Promise((resolve, reject) => {
@@ -20,6 +23,7 @@ function request(url, options = {}, data = null) {
       }
     }
 
+    if (parsedUrl.pathname.startsWith('/api/admin/') && adminCookie) reqOptions.headers.Cookie = adminCookie;
     const req = http.request(reqOptions, (res) => {
       let body = '';
       res.on('data', chunk => body += chunk);
@@ -45,9 +49,10 @@ async function runE2E() {
   console.log('🚀 Starte End-to-End Test für Server, REST APIs und WebSockets...');
 
   const path = require('path');
+  require('child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'src/seed.js')], { env: testEnv });
   const serverProcess = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], {
     cwd: path.join(__dirname, '..'),
-    env: { ...process.env, PORT: '3333' }
+    env: testEnv
   });
 
   serverProcess.stdout.on('data', data => console.log(`[Server] ${data.toString().trim()}`));
@@ -95,11 +100,12 @@ async function runE2E() {
     assert.strictEqual(wrongPwRes.status, 401, 'Falsches Passwort muss 401 liefern');
 
     const correctPwRes = await request(`${baseUrl}/api/admin/auth`, { method: 'POST' }, {
-      password: 'casaxx',
+      password: 'test-only-password',
       userId: token
     });
     assert.strictEqual(correctPwRes.status, 200, 'Korrektes Passwort casaxx muss 200 liefern');
     assert.strictEqual(correctPwRes.data.success, true);
+    adminCookie = correctPwRes.headers['set-cookie'][0].split(';')[0];
 
     // 4. WebSocket Connection
     console.log('4. Teste Live WebSocket Verbindung...');
@@ -115,7 +121,7 @@ async function runE2E() {
 
     await new Promise(resolve => {
       ws.on('open', () => {
-        ws.send(JSON.stringify({ type: 'identify', userId: token, role: 'player' }));
+        ws.send(JSON.stringify({ type: 'identify', token, role: 'player' }));
         setTimeout(resolve, 500);
       });
     });
@@ -208,13 +214,34 @@ async function runE2E() {
     assert.strictEqual(uploadRes.data.success, true);
     assert.ok(uploadRes.data.url.startsWith('/uploads/'));
 
-    // 9. Test Pedestrian Routing Proxy (/api/route)
-    console.log('9. Teste Fußgänger-Routing API (/api/route)...');
-    const routeRes = await request(`${baseUrl}/api/route?coords=11.0328,50.9787;11.0305,50.9802`);
-    assert.strictEqual(routeRes.status, 200);
-    assert.strictEqual(routeRes.data.code, 'Ok');
-    assert.ok(routeRes.data.routes && routeRes.data.routes[0]);
-    assert.ok(routeRes.data.routes[0].geometry.coordinates.length > 0);
+    // Deterministic invalid routing request; public provider availability is not a test dependency.
+    assert.strictEqual((await request(`${baseUrl}/api/route?coords=invalid`)).status, 400);
+    require('fs').unlinkSync(path.join(__dirname, '..', 'public', uploadRes.data.url));
+
+    console.log('9. Regression: protected admin, private answers, session identity, timer stop and validation...');
+    const savedCookie = adminCookie;
+    adminCookie = '';
+    assert.strictEqual((await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' })).status, 401);
+    const publicSlides = await request(`${baseUrl}/api/slides`);
+    assert.ok(publicSlides.data.every(s => !('admin_notes' in s) && !('correct_option_index' in s) && !('target_value' in s)));
+    assert.notStrictEqual(token, loginRes.data.user.id);
+    assert.strictEqual((await request(`${baseUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${loginRes.data.user.id}` } })).status, 401);
+    assert.strictEqual((await request(`${baseUrl}/api/auth/login`, { method: 'POST' }, { name: 'Max Mustermann' })).status, 409);
+    adminCookie = savedCookie;
+    await request(`${baseUrl}/api/admin/set-slide`, { method: 'POST' }, { slide_index: 1 });
+    const hiddenState = await request(`${baseUrl}/api/state`);
+    assert.ok(!('correct_option_index' in hiddenState.data.current_slide));
+    assert.ok(!('admin_notes' in hiddenState.data.current_slide));
+    assert.strictEqual((await request(`${baseUrl}/api/admin/set-phase`, { method: 'POST' }, { phase: 'oops' })).status, 400);
+    assert.strictEqual((await request(`${baseUrl}/api/admin/timer/start`, { method: 'POST' }, { duration: -1 })).status, 400);
+    await request(`${baseUrl}/api/admin/timer/start`, { method: 'POST' }, { duration: 25 });
+    const answerOptions = { method: 'POST', headers: { Authorization: `Bearer ${token}` } };
+    assert.strictEqual((await request(`${baseUrl}/api/submissions`, answerOptions, { slide_id: 'slide-02', selected_option: 99 })).status, 400);
+    await request(`${baseUrl}/api/admin/timer/stop`, { method: 'POST' });
+    assert.strictEqual((await request(`${baseUrl}/api/submissions`, answerOptions, { slide_id: 'slide-02', selected_option: 1 })).status, 400);
+    assert.strictEqual((await request(`${baseUrl}/api/admin/upload`, { method: 'POST' }, { filename: 'attack.html', filedata: 'PHNjcmlwdD4=' })).status, 400);
+    await request(`${baseUrl}/api/admin/logout`, { method: 'POST' });
+    assert.strictEqual((await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' })).status, 401);
 
     // Check participants_status in state
     const stateCheck = await request(`${baseUrl}/api/state`);

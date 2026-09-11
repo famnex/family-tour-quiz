@@ -2,13 +2,13 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="theme-color" content="#6366f1">
   <meta name="description" content="Familienausflug-Rallye Companion App – Live-synchronisierte Stadtrallye und Quiz für die ganze Familie">
   <title>Familienausflug-Rallye</title>
   
-  <link rel="manifest" href="manifest.json?v=1.5.8">
-  <link rel="stylesheet" href="css/style.css?v=1.5.8">
+  <link rel="manifest" href="manifest.json?v=1.6.0">
+  <link rel="stylesheet" href="css/style.css?v=1.6.0">
   <!-- Leaflet Map CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script>
@@ -20,6 +20,7 @@
   </script>
 </head>
 <body>
+<div id="toast-message" class="toast-message hidden" role="status" aria-live="polite"></div>
 
   <div id="app">
     <!-- Push Announcement Banner (Eilmeldung) -->
@@ -46,6 +47,11 @@
 
     <!-- Main Content -->
     <main>
+      <section class="tour-welcome" aria-label="Tourfortschritt">
+        <div><span class="eyebrow">ZUSAMMEN UNTERWEGS</span><h2>Euer kleines Abenteuer.</h2></div>
+        <span id="live-connection-label" class="live-label" role="status">Verbindung wird aufgebaut …</span>
+        <div class="tour-progress"><span id="tour-progress-label">Die Tour wird geladen</span><div class="tour-progress-track"><div id="tour-progress-fill"></div></div></div>
+      </section>
       <!-- UNIFIED SLIDE STAGE CARD -->
       <div class="slide-stage-card" id="slide-stage-card">
         
@@ -172,7 +178,7 @@
 
       <form id="auth-form" style="display: flex; flex-direction: column; gap: 16px;">
         <div>
-          <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Dein Vorname</label>
+          <label for="login-name" style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Dein Vorname</label>
           <input type="text" id="login-name" class="input-field" placeholder="z. B. Papa, Jonas, Mama, Lea" required maxlength="20" autofocus autocomplete="given-name">
         </div>
 
@@ -222,7 +228,7 @@
       </p>
 
       <form id="admin-password-form" style="display: flex; flex-direction: column; gap: 14px;">
-        <input type="password" id="admin-pw-input" class="input-field" placeholder="Admin-Passwort eingeben" required autofocus autocomplete="current-password">
+        <input type="password" id="admin-pw-input" aria-label="Admin-Passwort" class="input-field" placeholder="Admin-Passwort eingeben" required autofocus autocomplete="current-password">
         <div id="admin-pw-error" style="color: #ef4444; font-size: 0.9rem; font-weight: 800; background: rgba(239, 68, 68, 0.15); padding: 8px 12px; border-radius: var(--radius-sm);" class="hidden">
           ❌ Falsches Admin-Passwort!
         </div>
@@ -677,10 +683,11 @@
   <!-- Scripts -->
   <!-- Leaflet Map JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="js/audioSynth.js?v=1.5.8"></script>
-  <script src="js/confetti.js?v=1.5.8"></script>
-  <script src="js/odometer.js?v=1.5.8"></script>
-  <script src="js/admin.js?v=1.5.8"></script>
-  <script src="js/app.js?v=1.5.8"></script>
+  <script src="js/ui.js?v=1.6.0"></script>
+  <script src="js/audioSynth.js?v=1.6.0"></script>
+  <script src="js/confetti.js?v=1.6.0"></script>
+  <script src="js/odometer.js?v=1.6.0"></script>
+  <script src="js/admin.js?v=1.6.0"></script>
+  <script src="js/app.js?v=1.6.0"></script>
 </body>
 </html>

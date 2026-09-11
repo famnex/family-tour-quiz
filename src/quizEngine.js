@@ -67,7 +67,7 @@ function settleSlideScores(slideId) {
         if (isCorrect) {
           rank = speedRank++;
           speedBonus = getSpeedBonusFactor(rank);
-          rawScore = slide.max_points || 100;
+          rawScore = slide.max_points ?? 100;
           finalPoints = Math.round(rawScore * speedBonus);
         }
 
@@ -83,7 +83,7 @@ function settleSlideScores(slideId) {
       }
     } else if (slide.type === 'estimation') {
       const target = slide.target_value;
-      const maxPts = slide.max_points || 100;
+      const maxPts = slide.max_points ?? 100;
 
       for (const sub of submissions) {
         const guess = sub.numeric_value !== null ? sub.numeric_value : parseFloat(sub.answer_text);
@@ -142,7 +142,7 @@ function settleSlideScores(slideId) {
 function getLeaderboard() {
   return db.prepare(`
     SELECT id, name, role, avatar_color, avatar_emoji, score, last_seen
-    FROM users 
+    FROM users WHERE role = 'player'
     ORDER BY score DESC, created_at ASC
   `).all();
 }

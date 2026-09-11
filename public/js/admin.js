@@ -23,6 +23,21 @@ class AdminController {
     this.isSaving = false;
   }
 
+  async request(url, options) {
+    const res = await fetch(url, options);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        sessionStorage.removeItem('rallye_admin_unlocked');
+        document.getElementById('admin-modal').classList.add('hidden');
+      }
+      const message = data.error || 'Aktion fehlgeschlagen. Bitte erneut versuchen.';
+      window.showToast(message, true);
+      throw new Error(message);
+    }
+    return res;
+  }
+
   async init() {
     if (this.isInitialized) return;
     this.isInitialized = true;
@@ -33,7 +48,7 @@ class AdminController {
 
   async fetchLiveState() {
     try {
-      const res = await fetch(window.apiUrl('/api/state'));
+      const res = await this.request(window.apiUrl('/api/state'));
       if (res.ok) {
         const state = await res.json();
         this.updateFromState(state);
@@ -155,7 +170,9 @@ class AdminController {
     }
 
     if (adminLockBtn) {
-      adminLockBtn.addEventListener('click', () => {
+      adminLockBtn.addEventListener('click', async () => {
+        try { await this.request(window.apiUrl('/api/admin/logout'), { method: 'POST' }); } catch {}
+        window.app?.connectWebSocket();
         sessionStorage.removeItem('rallye_admin_unlocked');
         adminModal.classList.add('hidden');
         alert('Admin-Sitzung gesperrt 🔒');
@@ -165,9 +182,9 @@ class AdminController {
     if (adminPwForm) {
       adminPwForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const password = adminPwInput.value.trim();
+        const password = adminPwInput.value;
         try {
-          const res = await fetch(window.apiUrl('/api/admin/auth'), {
+          const res = await this.request(window.apiUrl('/api/admin/auth'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ password, userId: window.app?.user?.id })
@@ -180,7 +197,9 @@ class AdminController {
             }
             adminPwModal.classList.add('hidden');
             adminModal.classList.remove('hidden');
-            this.loadSlides();
+            await this.loadSlides();
+            await this.fetchLiveState();
+            window.app?.connectWebSocket();
           } else {
             adminPwError.classList.remove('hidden');
             if (window.soundFx) window.soundFx.playWrongBuzzer();
@@ -454,7 +473,7 @@ class AdminController {
     reader.onload = async (e) => {
       const filedata = e.target.result;
       try {
-        const res = await fetch(window.apiUrl('/api/admin/upload'), {
+        const res = await this.request(window.apiUrl('/api/admin/upload'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ filename: file.name, filedata })
@@ -484,7 +503,7 @@ class AdminController {
 
   async sendMediaControl(action) {
     try {
-      await fetch(window.apiUrl('/api/admin/media-control'), {
+      await this.request(window.apiUrl('/api/admin/media-control'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action })
@@ -663,7 +682,7 @@ class AdminController {
     // Media preview
     if (mediaEl) {
       if (currentSlide.media_url) {
-        mediaEl.innerHTML = `<img src="${currentSlide.media_url}" alt="Station Media" style="width: 100%; max-height: 140px; object-fit: cover; border-radius: 4px;">`;
+        mediaEl.innerHTML = `<img src="${window.escapeHtml(currentSlide.media_url)}" alt="Station Media" style="width: 100%; max-height: 140px; object-fit: cover; border-radius: 4px;">`;
         mediaEl.classList.remove('hidden');
       } else {
         mediaEl.innerHTML = '';
@@ -756,7 +775,7 @@ class AdminController {
 
             optRow.innerHTML = `
               <strong style="color: ${revealAnswer && isCorrect ? '#34d399' : 'var(--text-muted)'};">${letters[idx]}:</strong>
-              <span style="flex: 1; color: white; font-size: 0.95rem;">${optText}</span>
+              <span style="flex: 1; color: white; font-size: 0.95rem;">${window.escapeHtml(optText)}</span>
               ${revealAnswer && isCorrect ? '<span style="color: #34d399; font-weight: 800; font-size: 0.85rem;">✓ Richtige Antwort</span>' : ''}
             `;
             optionsEl.appendChild(optRow);
@@ -842,12 +861,12 @@ class AdminController {
           statusColor = '#f59e0b';
         }
       } else if (state.phase >= 4) {
-        if (player.submission) {
-          if (player.submission.is_correct === 1 || player.submission.is_correct === true) {
-            statusIcon = `✅ Richtig (+${player.submission.final_points || 0})`;
+        if (player.has_submitted && player.is_correct !== null) {
+          if (player.is_correct === 1 || player.is_correct === true) {
+            statusIcon = `✅ Richtig (+${player.final_points || 0})`;
             statusColor = '#34d399';
-          } else if (player.submission.is_correct === 2) {
-            statusIcon = `🎯 Volltreffer! (+${player.submission.final_points || 0})`;
+          } else if (player.is_correct === 2) {
+            statusIcon = `🎯 Volltreffer! (+${player.final_points || 0})`;
             statusColor = '#38bdf8';
           } else {
             statusIcon = '❌ Falsch';
@@ -873,13 +892,13 @@ class AdminController {
 
       row.innerHTML = `
         <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="font-size: 1.1rem;">${player.avatar_emoji || '🌟'}</span>
-          <strong style="color: white; font-size: 0.9rem;">${player.name}</strong>
+          <span style="font-size: 1.1rem;">${window.escapeHtml(player.avatar_emoji || '🌟')}</span>
+          <strong style="color: white; font-size: 0.9rem;">${window.escapeHtml(player.name)}</strong>
           <small style="color: var(--text-muted);">(${player.score || 0})</small>
         </div>
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="font-size: 0.8rem; font-weight: 800; color: ${statusColor};">${statusIcon}</span>
-          <button type="button" class="btn-delete-player" data-id="${player.id}" data-name="${player.name}" style="background: none; border: none; color: #64748b; font-size: 0.85rem; cursor: pointer; padding: 2px 4px;" title="Teilnehmer entfernen">🗑️</button>
+          <button type="button" class="btn-delete-player" data-id="${player.id}" data-name="${window.escapeHtml(player.name)}" style="background: none; border: none; color: #64748b; font-size: 0.85rem; cursor: pointer; padding: 2px 4px;" title="Teilnehmer entfernen">🗑️</button>
         </div>
       `;
 
@@ -898,7 +917,7 @@ class AdminController {
 
   async deletePlayer(id) {
     try {
-      const res = await fetch(window.apiUrl(`/api/admin/users/${id}`), { method: 'DELETE' });
+      const res = await this.request(window.apiUrl(`/api/admin/users/${id}`), { method: 'DELETE' });
       if (!res.ok) {
         alert('Fehler beim Entfernen des Teilnehmers');
       }
@@ -910,7 +929,7 @@ class AdminController {
 
   async loadSlides() {
     try {
-      const res = await fetch(window.apiUrl('/api/slides'));
+      const res = await this.request(window.apiUrl('/api/slides'));
       this.allSlides = await res.json();
       this.renderSlideSelect();
       this.renderStudioList();
@@ -959,12 +978,12 @@ class AdminController {
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="badge badge-${slide.type}">${slide.type}</span>
-            <strong style="color: white; font-size: 0.95rem;">${idx + 1}. ${slide.title}</strong>
+            <strong style="color: white; font-size: 0.95rem;">${idx + 1}. ${window.escapeHtml(slide.title)}</strong>
           </div>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
           <small style="color: var(--text-muted); font-size: 0.8rem;">
-            ${slide.location_name || 'Kein Standort'} • ${slide.max_points} Pkt • ⏱️ ${slide.countdown_seconds}s
+            ${window.escapeHtml(slide.location_name || 'Kein Standort')} • ${slide.max_points} Pkt • ⏱️ ${slide.countdown_seconds}s
           </small>
           <div style="display: flex; gap: 4px;" onclick="event.stopPropagation();">
             <button class="icon-btn" style="padding: 4px 8px; font-size: 0.8rem;" onclick="window.admin.moveSlide(${idx}, -1)" title="Nach oben">▲</button>
@@ -984,7 +1003,7 @@ class AdminController {
 
   async setSlide(slideId) {
     try {
-      await fetch(window.apiUrl('/api/admin/set-slide'), {
+      await this.request(window.apiUrl('/api/admin/set-slide'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slide_id: slideId })
@@ -1055,7 +1074,7 @@ class AdminController {
     }
 
     try {
-      await fetch(window.apiUrl('/api/admin/set-phase'), {
+      await this.request(window.apiUrl('/api/admin/set-phase'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phase: targetPhase })
@@ -1067,7 +1086,7 @@ class AdminController {
 
   async startTimer(duration) {
     try {
-      await fetch(window.apiUrl('/api/admin/timer/start'), {
+      await this.request(window.apiUrl('/api/admin/timer/start'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ duration })
@@ -1079,7 +1098,7 @@ class AdminController {
 
   async stopTimer() {
     try {
-      await fetch(window.apiUrl('/api/admin/timer/stop'), { method: 'POST' });
+      await this.request(window.apiUrl('/api/admin/timer/stop'), { method: 'POST' });
     } catch (e) {
       console.error(e);
     }
@@ -1087,7 +1106,7 @@ class AdminController {
 
   async sendAnnouncement(message) {
     try {
-      await fetch(window.apiUrl('/api/admin/announcement'), {
+      await this.request(window.apiUrl('/api/admin/announcement'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message })
@@ -1099,7 +1118,7 @@ class AdminController {
 
   async clearAnnouncement() {
     try {
-      await fetch(window.apiUrl('/api/admin/clear-announcement'), { method: 'POST' });
+      await this.request(window.apiUrl('/api/admin/clear-announcement'), { method: 'POST' });
     } catch (e) {
       console.error(e);
     }
@@ -1107,7 +1126,7 @@ class AdminController {
 
   async resetTour() {
     try {
-      await fetch(window.apiUrl('/api/admin/reset-rallye'), { method: 'POST' });
+      await this.request(window.apiUrl('/api/admin/reset-rallye'), { method: 'POST' });
     } catch (e) {
       console.error(e);
     }
@@ -1115,7 +1134,7 @@ class AdminController {
 
   async seedSampleTour() {
     try {
-      await fetch(window.apiUrl('/api/admin/seed-sample'), { method: 'POST' });
+      await this.request(window.apiUrl('/api/admin/seed-sample'), { method: 'POST' });
       await this.loadSlides();
     } catch (e) {
       console.error(e);
@@ -1132,7 +1151,7 @@ class AdminController {
 
     const newOrder = copy.map(s => s.id);
     try {
-      await fetch(window.apiUrl('/api/admin/slides/reorder'), {
+      await this.request(window.apiUrl('/api/admin/slides/reorder'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order: newOrder })
@@ -1146,7 +1165,7 @@ class AdminController {
   async deleteSlide(id) {
     if (!confirm('Diese Folie wirklich löschen?')) return;
     try {
-      await fetch(window.apiUrl(`/api/admin/slides/${id}`), { method: 'DELETE' });
+      await this.request(window.apiUrl(`/api/admin/slides/${id}`), { method: 'DELETE' });
       this.editingSlideId = null;
       await this.loadSlides();
     } catch (e) {
@@ -1156,7 +1175,7 @@ class AdminController {
 
   async exportTour() {
     try {
-      const res = await fetch(window.apiUrl('/api/admin/tour/export'));
+      const res = await this.request(window.apiUrl('/api/admin/tour/export'));
       if (!res.ok) throw new Error('Export fehlgeschlagen');
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -1182,7 +1201,7 @@ class AdminController {
     reader.onload = async (e) => {
       try {
         const tourData = JSON.parse(e.target.result);
-        const res = await fetch(window.apiUrl('/api/admin/tour/import'), {
+        const res = await this.request(window.apiUrl('/api/admin/tour/import'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ tour_data: tourData })
@@ -1380,10 +1399,13 @@ class AdminController {
         document.getElementById('edit-slide-opt1').value.trim(),
         document.getElementById('edit-slide-opt2').value.trim(),
         document.getElementById('edit-slide-opt3').value.trim()
-      ].filter(o => o !== '');
+      ];
       
       const checkedRadio = document.querySelector('input[name="correct_opt_radio"]:checked');
-      correct_option_index = checkedRadio ? parseInt(checkedRadio.value, 10) : 0;
+      const selectedIndex = checkedRadio ? parseInt(checkedRadio.value, 10) : 0;
+      correct_option_index = options.slice(0, selectedIndex).filter(Boolean).length;
+      if (!options[selectedIndex]) correct_option_index = -1;
+      options = options.filter(Boolean);
     } else if (type === 'estimation') {
       target_value = parseFloat(document.getElementById('edit-slide-target-val').value) || 0;
       scale_factor = parseFloat(document.getElementById('edit-slide-scale').value) || 100;
@@ -1399,16 +1421,16 @@ class AdminController {
     try {
       let savedSlideId = slideId;
       if (slideId) {
-        await fetch(window.apiUrl(`/api/admin/slides/${slideId}`), {
+        await this.request(window.apiUrl(`/api/admin/slides/${slideId}`), {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: 'casaxx', ...payload })
+          body: JSON.stringify(payload)
         });
       } else {
-        const res = await fetch(window.apiUrl('/api/admin/slides'), {
+        const res = await this.request(window.apiUrl('/api/admin/slides'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: 'casaxx', ...payload })
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         savedSlideId = data.slide?.id;
@@ -1418,7 +1440,7 @@ class AdminController {
       if (savedSlideId) {
         this.openSlideEditor(savedSlideId);
       }
-      alert('Folie erfolgreich gespeichert! ✅');
+      window.showToast('Folie gespeichert ✓');
     } catch (e) {
       console.error(e);
       alert('Fehler beim Speichern der Folie');
@@ -1812,8 +1834,8 @@ class AdminController {
             <span class="badge badge-${slide.type}" style="font-size: 0.75rem;">${slide.type.toUpperCase()}</span>
             ${isCurrent ? '<strong style="color: #f59e0b; font-size: 0.75rem;">🔥 AKTIV</strong>' : ''}
           </div>
-          <strong style="color: white; font-size: 1rem; display: block; margin-bottom: 2px;">${stepNumber}. ${slide.title}</strong>
-          ${slide.location_name ? `<small style="color: #38bdf8; display: block; margin-bottom: 6px;">📍 ${slide.location_name}</small>` : ''}
+          <strong style="color: white; font-size: 1rem; display: block; margin-bottom: 2px;">${stepNumber}. ${window.escapeHtml(slide.title)}</strong>
+          ${slide.location_name ? `<small style="color: #38bdf8; display: block; margin-bottom: 6px;">📍 ${window.escapeHtml(slide.location_name)}</small>` : ''}
           <div style="margin-top: 8px;">
             <button class="submit-btn" style="width: 100%; padding: 8px 10px; font-size: 0.85rem;" onclick="window.admin.setSlideWithConfirm('${slide.id}')">
               Zu dieser Station wechseln ▶
