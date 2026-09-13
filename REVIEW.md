@@ -2,7 +2,7 @@
 
 Ausgangspunkt: GitHub `famnex/family-tour-quiz`, Commit `c0579cdc386e42af24a2da57fc0026719ce90a3f`.
 
-Die Änderungen liegen in dieser Arbeitskopie. Sie wurden nicht auf GitHub oder einen laufenden Server übertragen. Die Prüfung konzentriert sich auf Anmeldung, Live-Quiz, Admin-Funktionen, Eingabevalidierung, mobile Bedienung und den lokalen Start. Sie ersetzt keinen vollständigen Penetrationstest.
+Die Überarbeitung wird im GitHub-Repository bereitgestellt. Ein laufender Server muss separat aktualisiert werden. Die Prüfung konzentriert sich auf Anmeldung, Live-Quiz, Admin-Funktionen, Eingabevalidierung, mobile Bedienung und den lokalen Start. Sie ersetzt keinen vollständigen Penetrationstest.
 
 ## Wichtigste gefundene Fehler und Korrekturen
 
@@ -39,8 +39,8 @@ Die Änderungen liegen in dieser Arbeitskopie. Sie wurden nicht auf GitHub oder 
 ## Priorisierte nächste Schritte
 
 1. **Tour-Generalprobe / Teilnehmervorschau.** Im Studio eine Vorschau aller fünf Phasen mit einem simulierten Mitspieler anbieten. So fallen fehlende Antworten, schlecht lesbare Bilder und ungeeignete Zeiten vor dem Ausflug auf.
-2. **Entwurfsschutz im Studio.** Ungespeicherte Änderungen beim Folienwechsel und Schließen erkennen; Entwurf lokal sichern; Löschen mit Rückgängig-Funktion versehen. Derzeit können Formulareingaben verloren gehen.
-3. **Einladung und Wiederanmeldung.** QR-Code zur Tour und ein Wiederherstellungscode je Spieler. Damit lassen sich Gerätewechsel und gleiche Vornamen sauber lösen, ohne die unsichere Anmeldung allein über den Namen wieder einzuführen.
+2. **Löschen rückgängig machen.** Entwurfsschutz mit Speichern/Verwerfen/Abbrechen und Wiederherstellung nach Neuladen ist umgesetzt. Als nächster Schritt fehlt eine Rückgängig-Funktion für gelöschte Folien.
+3. **Wiederanmeldung.** QR-Einladungen mit Kopieren, Teilen und SVG-Download sind umgesetzt. Als nächster Schritt bietet sich ein Wiederherstellungscode je Spieler an. Damit lassen sich Gerätewechsel und gleiche Vornamen sauber lösen, ohne die unsichere Anmeldung allein über den Namen wieder einzuführen.
 4. **Familienfreundliche Wertung.** Optional Geschwindigkeitsbonus deaktivieren, Teamspiel erlauben und kooperative Gesamtziele ergänzen. Für Kinder und schwankendes Mobilfunknetz ist eine rein zeitabhängige Rangfolge oft frustrierend.
 5. **Verlässliche Vorbereitung unterwegs.** Medien vor der Tour gezielt herunterladen und Downloadstatus anzeigen. Live-Spiel benötigt weiterhin Serverkontakt. Externe Karten, CDN-Skripte und Bilder werden nicht vollständig offline bereitgestellt.
 6. **Zustandslogik bündeln.** Phasenwechsel, Timer, Auswertung und Folienwechsel als zentrale Übergänge mit klaren Regeln behandeln. `server.js` danach in Auth-, Tour-, Quiz- und Medienmodule aufteilen. Das erleichtert Wiederholungsrunden und verhindert Sonderfälle beim manuellen Zurückspringen.
@@ -50,7 +50,7 @@ Die Änderungen liegen in dieser Arbeitskopie. Sie wurden nicht auf GitHub oder 
 
 ## Start und Update
 
-Diese Version wurde unter Node.js 22 getestet; die Laufzeit ist in `package.json` eingetragen. Es wurden keine zusätzlichen Laufzeitabhängigkeiten eingebaut. Browser-Testwerkzeuge gehören nicht zum Projektpaket.
+Diese Version wurde unter Node.js 22 getestet; die Laufzeit ist in `package.json` eingetragen. Für lokal erzeugte QR-Einladungen wurde `qrcode` als Laufzeitabhängigkeit ergänzt; beim Update `npm ci` ausführen. Browser-Testwerkzeuge gehören nicht zum Projektpaket.
 
 Kein fest eingebautes Standardpasswort mehr: `ADMIN_PASSWORD` setzen oder das beim Serverstart angezeigte Zufallspasswort verwenden. Bestehende Spielertoken werden durch die Umstellung ungültig. Bereits belegte Namen werden nicht automatisch übernommen. Daten und Uploads bei einem Update erhalten, nicht erneut seeden. Details stehen in der README.
 
@@ -65,3 +65,7 @@ Kein fest eingebautes Standardpasswort mehr: `ADMIN_PASSWORD` setzen oder das be
 ### Browserprüfung der überarbeiteten Oberfläche
 
 Headless Chromium: Anmeldung, Admin-Freischaltung, mobile Ansicht bei 390 × 844, Schätzabgabe mit Dezimalkomma, Erhalt der Sitzung beim Neuladen, gesperrter Abgabebutton nach Timerstopp und Desktopansicht bei 1440 × 1000 erfolgreich geprüft. Keine JavaScript-Laufzeitfehler in diesem Ablauf; kein horizontaler Seitenüberlauf auf dem geprüften mobilen Viewport. Screenshots der Quiz- und Adminansicht wurden angesehen. Externe Requests waren für diesen Test gesperrt; Karten, externe Bilder, Schriften und echte Geräte sind damit nicht visuell verifiziert. Fehlende Stationsbilder erhalten nun einen lesbaren Ersatzhinweis.
+
+### Prüfung von Entwurfsschutz und Einladungen
+
+Chromium: Abbrechen, Verwerfen und Speichern beim Wechsel, Entwurfswiederherstellung nach Neuladen, Erhalt der Eingabe bei simuliertem Speicherfehler sowie serverseitiges Sperren über das mobile Menü erfolgreich geprüft. Der erzeugte QR-Code wurde aus dem Bild zurückgelesen; die Teilnahmeadresse einschließlich `/family/` stimmt überein. Eine nachträgliche URL-Änderung deaktiviert den alten QR-Code. Die mobile Dialogansicht wurde bei 390 × 844 geprüft. REST-Regressionstests prüfen zusätzlich Zugriffsschutz, SVG-Ausgabe und ungültige Einladungsadressen.

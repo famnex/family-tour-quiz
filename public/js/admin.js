@@ -21,6 +21,7 @@ class AdminController {
     this.lastRenderedCoordsKey = null;
     this.isInitialized = false;
     this.isSaving = false;
+    this.guard = new window.EditorGuard(document.getElementById('studio-slide-form'));
   }
 
   async request(url, options) {
@@ -88,21 +89,21 @@ class AdminController {
       });
     }
 
-    if (mobileLockBtn) {
-      mobileLockBtn.addEventListener('click', () => {
+    const closeWorkspace = async (lock = false) => {
+      if (!await this.guard.confirmLeave()) return;
+      if (lock) {
+        try { await this.request(window.apiUrl('/api/admin/logout'), { method: 'POST' }); }
+        catch { return; }
         sessionStorage.removeItem('rallye_admin_unlocked');
-        adminMobileDrawer?.classList.add('hidden');
-        adminModal?.classList.add('hidden');
-        alert('Admin-Sitzung gesperrt 🔒');
-      });
-    }
-
-    if (mobileCloseBtn) {
-      mobileCloseBtn.addEventListener('click', () => {
-        adminMobileDrawer?.classList.add('hidden');
-        adminModal?.classList.add('hidden');
-      });
-    }
+        window.app?.connectWebSocket();
+      }
+      adminMobileDrawer?.classList.add('hidden');
+      adminModal?.classList.add('hidden');
+    };
+    mobileLockBtn?.addEventListener('click', () => closeWorkspace(true));
+    mobileCloseBtn?.addEventListener('click', () => closeWorkspace());
+    adminLockBtn?.addEventListener('click', () => closeWorkspace(true));
+    closeAdminBtn?.addEventListener('click', () => closeWorkspace());
 
     // Map Picker Modal Elements
     const openMapPickerBtn = document.getElementById('edit-open-map-picker-btn');
@@ -150,10 +151,11 @@ class AdminController {
     const adminPwError = document.getElementById('admin-pw-error');
 
     if (adminToggleBtn) {
-      adminToggleBtn.addEventListener('click', () => {
+      adminToggleBtn.addEventListener('click', async () => {
         if (this.isAdminUnlocked()) {
           adminModal.classList.remove('hidden');
-          this.loadSlides();
+          await this.loadSlides();
+          await this.guard.offerRestore();
         } else {
           adminPwInput.value = '';
           adminPwError.classList.add('hidden');
@@ -166,16 +168,6 @@ class AdminController {
     if (closeAdminPwBtn) {
       closeAdminPwBtn.addEventListener('click', () => {
         adminPwModal.classList.add('hidden');
-      });
-    }
-
-    if (adminLockBtn) {
-      adminLockBtn.addEventListener('click', async () => {
-        try { await this.request(window.apiUrl('/api/admin/logout'), { method: 'POST' }); } catch {}
-        window.app?.connectWebSocket();
-        sessionStorage.removeItem('rallye_admin_unlocked');
-        adminModal.classList.add('hidden');
-        alert('Admin-Sitzung gesperrt 🔒');
       });
     }
 
@@ -200,6 +192,7 @@ class AdminController {
             await this.loadSlides();
             await this.fetchLiveState();
             window.app?.connectWebSocket();
+            await this.guard.offerRestore();
           } else {
             adminPwError.classList.remove('hidden');
             if (window.soundFx) window.soundFx.playWrongBuzzer();
@@ -210,14 +203,9 @@ class AdminController {
       });
     }
 
-    if (closeAdminBtn) {
-      closeAdminBtn.addEventListener('click', () => {
-        adminModal.classList.add('hidden');
-      });
-    }
-
     // Unified Tab Switching Function
     const switchTab = async (tabName) => {
+      if (tabName !== 'studio' && !await this.guard.confirmLeave()) return;
       const tabController = document.getElementById('tab-controller-btn');
       const tabStudio = document.getElementById('tab-studio-btn');
       const tabRoute = document.getElementById('tab-route-btn');
@@ -481,6 +469,7 @@ class AdminController {
         const data = await res.json();
         if (data.success && data.url) {
           document.getElementById(targetInputId).value = data.url;
+          this.guard.changed();
           if (targetInputId === 'edit-slide-media-url') {
             const prevContainer = document.getElementById('edit-media-preview-container');
             const prevImg = document.getElementById('edit-media-preview-img');
@@ -934,8 +923,10 @@ class AdminController {
       this.renderSlideSelect();
       this.renderStudioList();
 
-      if (!this.editingSlideId && this.allSlides.length > 0) {
-        this.openSlideEditor(this.allSlides[0].id);
+      if (this.guard.baseline === null && this.allSlides.length > 0) {
+        await this.openSlideEditor(this.allSlides[0].id, true);
+      } else if (this.editingSlideId && !this.guard.isDirty() && !this.isSaving && this.allSlides.some(s => s.id === this.editingSlideId)) {
+        await this.openSlideEditor(this.editingSlideId, true);
       }
 
       const tabRoute = document.getElementById('tab-route-btn');
@@ -1133,9 +1124,11 @@ class AdminController {
   }
 
   async seedSampleTour() {
+    if (!await this.guard.confirmLeave()) return;
     try {
       await this.request(window.apiUrl('/api/admin/seed-sample'), { method: 'POST' });
       await this.loadSlides();
+      await this.openSlideEditor(this.allSlides[0]?.id || null, true);
     } catch (e) {
       console.error(e);
     }
@@ -1163,11 +1156,13 @@ class AdminController {
   }
 
   async deleteSlide(id) {
+    if (!await this.guard.confirmLeave()) return;
     if (!confirm('Diese Folie wirklich löschen?')) return;
     try {
       await this.request(window.apiUrl(`/api/admin/slides/${id}`), { method: 'DELETE' });
       this.editingSlideId = null;
       await this.loadSlides();
+      await this.openSlideEditor(this.allSlides[0]?.id || null, true);
     } catch (e) {
       console.error(e);
     }
@@ -1193,6 +1188,7 @@ class AdminController {
   }
 
   async importTour(file) {
+    if (!await this.guard.confirmLeave()) return;
     if (!confirm(`Möchtest du die Rallye aus der Datei "${file.name}" importieren? Bestehende Folien werden durch das Backup ersetzt.`)) {
       return;
     }
@@ -1209,6 +1205,7 @@ class AdminController {
         const data = await res.json();
         if (data.success) {
           await this.loadSlides();
+          await this.openSlideEditor(this.allSlides[0]?.id || null, true);
           alert(`Erfolg! ${data.count} Stationen erfolgreich wiederhergestellt! ✅`);
         } else {
           alert('Import fehlgeschlagen: ' + (data.error || 'Unbekannter Fehler'));
@@ -1221,7 +1218,8 @@ class AdminController {
     reader.readAsText(file);
   }
 
-  openSlideEditor(slideId = null) {
+  async openSlideEditor(slideId = null, skipGuard = false) {
+    if (!skipGuard && !await this.guard.confirmLeave()) return false;
     this.editingSlideId = slideId;
     this.renderStudioList();
 
@@ -1244,7 +1242,8 @@ class AdminController {
       document.getElementById('edit-media-preview-container').classList.add('hidden');
       document.getElementById('edit-audio-url-wrapper').classList.add('hidden');
       this.toggleSlideTypeFields('info');
-      return;
+      this.guard.markClean(this.guard.baseline !== null && this.guard.restored);
+      return true;
     }
 
     const slide = this.allSlides.find(s => s.id === slideId);
@@ -1327,6 +1326,8 @@ class AdminController {
     document.getElementById('edit-slide-scale').value = slide.scale_factor ?? 100;
 
     this.toggleSlideTypeFields(slide.type);
+    this.guard.markClean(this.guard.baseline !== null && this.guard.restored);
+    return true;
   }
 
   toggleSlideTypeFields(type) {
@@ -1361,7 +1362,10 @@ class AdminController {
   }
 
   async saveSlide() {
-    if (this.isSaving) return;
+    if (this.isSaving) return false;
+    if (!document.getElementById('studio-slide-form').reportValidity()) return false;
+    this.guard.saving = true;
+    document.getElementById('studio-slide-form').inert = true;
     this.isSaving = true;
 
     const submitBtn = document.querySelector('#studio-slide-form button[type="submit"]');
@@ -1436,15 +1440,19 @@ class AdminController {
         savedSlideId = data.slide?.id;
       }
 
+      this.guard.markClean();
+      this.editingSlideId = savedSlideId;
       await this.loadSlides();
-      if (savedSlideId) {
-        this.openSlideEditor(savedSlideId);
-      }
+      if (savedSlideId) await this.openSlideEditor(savedSlideId, true);
       window.showToast('Folie gespeichert ✓');
+      return true;
     } catch (e) {
       console.error(e);
-      alert('Fehler beim Speichern der Folie');
+      window.showToast('Speichern fehlgeschlagen. Deine Änderungen bleiben erhalten.', true);
+      return false;
     } finally {
+      document.getElementById('studio-slide-form').inert = false;
+      this.guard.saving = false;
       this.isSaving = false;
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -1637,6 +1645,8 @@ class AdminController {
     }
 
     document.getElementById('admin-map-picker-modal')?.classList.add('hidden');
+    this.guard.changed();
+    this.guard.changed();
   }
 
   clearCoordsFromForm() {
@@ -1649,6 +1659,7 @@ class AdminController {
     }
     document.getElementById('edit-clear-coords-btn')?.classList.add('hidden');
     this.removePickerPin();
+    this.guard.changed();
   }
 
   // ==========================================

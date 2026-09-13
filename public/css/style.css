@@ -1899,3 +1899,16 @@ button:disabled { cursor: not-allowed; }
 .announcement-bar { position: relative; top: auto; box-shadow: none; }
 .tour-welcome { width: 100%; }
 .media-unavailable { min-height: 96px; display: grid; place-items: center; padding: 20px; color: var(--text-muted); font-size: .85rem; text-align: center; }
+
+.editor-save-status { margin: 0 0 12px; font-size: .9rem; color: #9db0c9; }
+.editor-save-status.is-dirty { color: #fcd34d; }
+.rallye-dialog { margin: auto; padding: 24px; width: min(520px, calc(100vw - 28px)); max-height: calc(100dvh - 32px); overflow-y: auto; color: var(--text-main); background: #142033; border: 1px solid #41516b; border-radius: 22px; box-shadow: 0 24px 80px #0009; }
+.rallye-dialog::backdrop { background: #020617bb; backdrop-filter: blur(5px); }
+.rallye-dialog h2 { font-size: 1.3rem; line-height: 1.25; }
+.rallye-dialog p { margin: 14px 0; line-height: 1.55; color: var(--text-muted); }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.dialog-actions button { flex: 1 1 180px; padding: 12px; }
+.invite-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.invite-qr:not(:empty) { background: white; border-radius: 12px; margin: 20px auto; width: min(100%, 320px); padding: 8px; }
+.invite-qr svg { width: 100%; height: auto; display: block; }
+#invite-status { font-size: .9rem; }

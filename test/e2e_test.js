@@ -222,6 +222,7 @@ async function runE2E() {
     const savedCookie = adminCookie;
     adminCookie = '';
     assert.strictEqual((await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' })).status, 401);
+    assert.strictEqual((await request(`${baseUrl}/api/admin/invite-qr`, { method: 'POST' }, { url: 'https://rallye.example.test/family/' })).status, 401);
     const publicSlides = await request(`${baseUrl}/api/slides`);
     assert.ok(publicSlides.data.every(s => !('admin_notes' in s) && !('correct_option_index' in s) && !('target_value' in s)));
     assert.notStrictEqual(token, loginRes.data.user.id);
@@ -240,6 +241,15 @@ async function runE2E() {
     await request(`${baseUrl}/api/admin/timer/stop`, { method: 'POST' });
     assert.strictEqual((await request(`${baseUrl}/api/submissions`, answerOptions, { slide_id: 'slide-02', selected_option: 1 })).status, 400);
     assert.strictEqual((await request(`${baseUrl}/api/admin/upload`, { method: 'POST' }, { filename: 'attack.html', filedata: 'PHNjcmlwdD4=' })).status, 400);
+    console.log('10. QR-Einladungen: URL, SVG und Eingabevalidierung...');
+    const invite = await request(`${baseUrl}/api/admin/invite-qr`, { method: 'POST' }, { url: 'https://rallye.example.test/family/' });
+    assert.strictEqual(invite.status, 200);
+    assert.strictEqual(invite.data.url, 'https://rallye.example.test/family/');
+    assert.ok(invite.data.svg.includes('<svg'));
+    assert.strictEqual(invite.headers['cache-control'], 'no-store');
+    for (const url of ['javascript:alert(1)', 'https://user:password@example.test/', 'invalid']) {
+      assert.strictEqual((await request(`${baseUrl}/api/admin/invite-qr`, { method: 'POST' }, { url })).status, 400);
+    }
     await request(`${baseUrl}/api/admin/logout`, { method: 'POST' });
     assert.strictEqual((await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' })).status, 401);
 

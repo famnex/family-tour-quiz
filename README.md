@@ -131,3 +131,11 @@ npm start
 ```
 
 Auf Windows `start.bat` verwenden. Installation der Abhängigkeiten benötigt Internet. Karten und externe Medien benötigen ebenfalls Internet; Live-Abgaben benötigen immer eine Verbindung zum Rallye-Server. Der Service Worker speichert die App-Oberfläche und bereits geladene eigene Medien, keine vollständige Offline-Spielrunde.
+
+### Entwurfsschutz und QR-Einladungen
+
+Das Slide Studio zeigt ungespeicherte Änderungen an. Beim Folienwechsel, Verlassen des Studios, Schließen oder Sperren stehen **Speichern**, **Verwerfen** und **Abbrechen** zur Wahl. Schlägt das Speichern fehl, bleiben Eingaben erhalten. Beim Neuladen warnt der Browser; beim erneuten Öffnen des Studios kann der Entwurf aus demselben Tab wiederhergestellt werden. Diese lokale Sicherung ersetzt kein gespeichertes Tour-Backup: Nach dem endgültigen Schließen des Tabs oder bei gesperrtem Browserspeicher ist eine Wiederherstellung nicht garantiert.
+
+In der Admin-Zentrale öffnet **Mitspieler einladen** einen QR-Code zur Teilnahmeadresse. Der Link kann kopiert, über die Gerätefreigabe geteilt und der QR-Code als SVG heruntergeladen werden. Die Erzeugung erfolgt auf dem eigenen Server ohne externen QR-Dienst. Unterpfade wie `/family/` bleiben erhalten. Bei lokalem Betrieb eine vom Handy erreichbare WLAN-Adresse eintragen, zum Beispiel `http://192.168.178.20:5500/`; `localhost` verweist auf das jeweilige Gerät. Der Link enthält keine Admin-Zugangsdaten.
+
+Beim Update **`npm ci` ausführen und den Server neu starten**, da für QR-Codes die Abhängigkeit `qrcode` hinzugekommen ist. Datenbank und Uploads beibehalten.

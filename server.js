@@ -349,6 +349,20 @@ app.use('/api/admin', (req, res, next) => {
   if (!isAdmin(req)) return res.status(401).json({ error: 'Admin-Sitzung abgelaufen. Bitte erneut entsperren.' });
   next();
 });
+// QR generation stays local to this server: no external QR service sees invitation URLs.
+app.post('/api/admin/invite-qr', async (req, res) => {
+  let url;
+  try {
+    if (typeof req.body.url !== 'string' || req.body.url.length > 1000) throw new Error();
+    url = new URL(req.body.url);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) throw new Error();
+  } catch { return res.status(400).json({ error: 'Ungültige Einladungsadresse.' }); }
+  try {
+    const svg = await require('qrcode').toString(url.href, {type: 'svg', errorCorrectionLevel: 'M', margin: 4, width: 320});
+    res.set('Cache-Control', 'no-store').json({url: url.href, svg});
+  } catch { res.status(400).json({error: 'Die Adresse kann nicht als QR-Code dargestellt werden.'}); }
+});
+
 function validateSlide(s) {
   if (!s || typeof s !== 'object' || !['info','transit','action','multiple_choice','estimation'].includes(s.type) || typeof s.title !== 'string' || !s.title.trim() || s.title.length > 200) return 'Titel und gültigen Folientyp angeben.';
   if (s.id !== undefined && (typeof s.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(s.id))) return 'Ungültige Folien-ID.';

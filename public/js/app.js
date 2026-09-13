@@ -138,6 +138,7 @@ class RallyeApp {
   }
 
   async logout() {
+    if (window.admin?.guard && !await window.admin.guard.confirmLeave()) return;
     await fetch(window.apiUrl('/api/auth/logout'), { method: 'POST' });
     localStorage.removeItem('rallye_auth_token');
     localStorage.removeItem('rallye_username');

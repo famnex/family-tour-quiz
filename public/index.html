@@ -7,8 +7,8 @@
   <meta name="description" content="Familienausflug-Rallye Companion App – Live-synchronisierte Stadtrallye und Quiz für die ganze Familie">
   <title>Familienausflug-Rallye</title>
   
-  <link rel="manifest" href="manifest.json?v=1.6.0">
-  <link rel="stylesheet" href="css/style.css?v=1.6.0">
+  <link rel="manifest" href="manifest.json?v=1.7.0">
+  <link rel="stylesheet" href="css/style.css?v=1.7.0">
   <!-- Leaflet Map CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script>
@@ -258,6 +258,7 @@
 
       <!-- Desktop Action Buttons -->
       <div class="admin-header-actions" id="admin-desktop-actions">
+        <button id="invite-open-btn" type="button" class="btn-secondary">Mitspieler einladen</button>
         <button id="admin-lock-btn" class="btn-secondary" style="padding: 6px 14px; font-size: 0.85rem;" title="Sitzung sperren">🔒 Sperren</button>
         <button id="close-admin-btn" class="icon-btn" style="padding: 6px 14px; font-size: 0.85rem;">🚪 Beenden</button>
       </div>
@@ -278,6 +279,7 @@
         <div style="display: flex; flex-direction: column; gap: 8px;">
           <button id="mobile-tab-controller-btn" class="mobile-drawer-item active">📱 Live-Steuerung</button>
           <button id="mobile-tab-studio-btn" class="mobile-drawer-item">🎨 Slide Studio (Designer)</button>
+          <button id="mobile-invite-open-btn" class="mobile-drawer-item" type="button">Mitspieler einladen · QR-Code</button>
           <button id="mobile-tab-route-btn" class="mobile-drawer-item">🗺️ Tour-Route</button>
         </div>
         <div style="display: flex; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border-color);">
@@ -466,6 +468,7 @@
             <span id="studio-editor-type-badge" class="badge badge-info">INFO</span>
           </div>
 
+          <p id="editor-save-status" class="editor-save-status" role="status">Keine ungespeicherten Änderungen</p>
           <form id="studio-slide-form" style="display: flex; flex-direction: column; gap: 18px;">
             <input type="hidden" id="edit-slide-id">
 
@@ -680,14 +683,50 @@
     </div>
   </div>
 
+  <dialog id="editor-unsaved-dialog" class="rallye-dialog" aria-labelledby="unsaved-title">
+    <h2 id="unsaved-title">Änderungen noch nicht gespeichert</h2>
+    <p>Was soll mit deinen Änderungen an dieser Folie passieren?</p>
+    <form method="dialog" class="dialog-actions">
+      <button class="submit-btn" value="save">Speichern und fortfahren</button>
+      <button class="btn-secondary" value="cancel" autofocus>Weiterbearbeiten</button>
+      <button class="btn-danger" value="discard">Änderungen verwerfen</button>
+    </form>
+  </dialog>
+  <dialog id="editor-restore-dialog" class="rallye-dialog" aria-labelledby="restore-title">
+    <h2 id="restore-title">Ungespeicherten Entwurf gefunden</h2>
+    <p>In diesem Browser-Tab liegt noch eine bearbeitete Folie. Möchtest du sie wiederherstellen?</p>
+    <form method="dialog" class="dialog-actions">
+      <button class="submit-btn" value="restore" autofocus>Entwurf wiederherstellen</button>
+      <button class="btn-secondary" value="discard">Entwurf verwerfen</button>
+    </form>
+  </dialog>
+  <dialog id="invite-dialog" class="rallye-dialog invite-dialog" aria-labelledby="invite-title">
+    <div class="invite-heading"><h2 id="invite-title">Zusammen auf Rallye</h2><button id="invite-close-btn" class="icon-btn" aria-label="Einladung schließen" type="button">×</button></div>
+    <p>QR-Code scannen, Namen eingeben und mitspielen. Die Einladung enthält keinen Admin-Zugang.</p>
+    <form id="invite-form" class="estimate-form">
+      <label for="invite-url">Adresse für deine Mitspieler</label>
+      <input id="invite-url" class="input-field" type="url" required maxlength="1000" spellcheck="false">
+      <button class="submit-btn" type="submit">QR-Code erstellen</button>
+    </form>
+    <div id="invite-qr" class="invite-qr"></div>
+    <p id="invite-status" role="status"></p>
+    <div class="dialog-actions">
+      <button id="invite-copy-btn" class="btn-secondary" type="button" data-invite-action disabled>Link kopieren</button>
+      <button id="invite-share-btn" class="btn-secondary" type="button" data-invite-action disabled>Einladung teilen</button>
+      <button id="invite-download-btn" class="btn-secondary" type="button" data-invite-action disabled>QR-Code herunterladen</button>
+    </div>
+  </dialog>
+
   <!-- Scripts -->
   <!-- Leaflet Map JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="js/ui.js?v=1.6.0"></script>
-  <script src="js/audioSynth.js?v=1.6.0"></script>
-  <script src="js/confetti.js?v=1.6.0"></script>
-  <script src="js/odometer.js?v=1.6.0"></script>
-  <script src="js/admin.js?v=1.6.0"></script>
-  <script src="js/app.js?v=1.6.0"></script>
+  <script src="js/ui.js?v=1.7.0"></script>
+  <script src="js/audioSynth.js?v=1.7.0"></script>
+  <script src="js/confetti.js?v=1.7.0"></script>
+  <script src="js/odometer.js?v=1.7.0"></script>
+  <script src="js/editorGuard.js?v=1.7.0"></script>
+  <script src="js/admin.js?v=1.7.0"></script>
+  <script src="js/app.js?v=1.7.0"></script>
+<script src="js/invitations.js?v=1.7.0"></script>
 </body>
 </html>
