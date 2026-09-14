@@ -87,7 +87,7 @@ pm2 stop family-tour-quiz
    - Geben nur ihren Vornamen ein (z. B. "Papa", "Jonas", "Mama"), wählen ein Emoji und klicken auf *"Los geht's"*.
 2. **Admin (Tour-Leiter)**:
    - Klickt oben rechts in der App auf den **👑 Admin-Button**.
-   - Gibt das Admin-Passwort ein: **das im Serverfenster angezeigte Passwort** (oder den Wert von `ADMIN_PASSWORD`).
+   - Gibt das Admin-Passwort ein: **das selbst festgelegte Passwort**.
    - Die Admin-Zentrale öffnet sich (Live-Steuerung & Slide Studio).
    - Steuert Folien und schaltet die 5 Phasen schrittweise per Knopfdruck durch.
    - Startet und stoppt den synchronen Countdown.
@@ -115,7 +115,7 @@ Siehe [REVIEW.md](REVIEW.md) für Fehler, Korrekturen, Tests und priorisierte Au
 
 ### Admin-Zugang und bestehende Installationen
 
-Ohne `ADMIN_PASSWORD` erzeugt der Server bei jedem Start ein zufälliges Passwort und zeigt es im Serverfenster an. Für einen festen Zugang vor dem Start `ADMIN_PASSWORD` als Umgebungsvariable setzen (unter PM2 in der lokalen Umgebung, nicht öffentlich ins Repository schreiben). Die Admin-Sitzung gilt acht Stunden. „Sperren“ widerruft sie serverseitig; „Beenden“ schließt nur die Ansicht.
+Das Admin-Passwort wird dauerhaft als gesalzener scrypt-Hash in der Datenbank gespeichert. Bei der ersten Migration wird ein vorhandenes `ADMIN_PASSWORD` übernommen; danach gilt das gespeicherte Passwort. Ohne diese Variable den Zugang über die Wiederherstellung unten einrichten. Die Admin-Sitzung gilt acht Stunden. „Sperren“ widerruft sie serverseitig; „Beenden“ schließt nur die Ansicht.
 
 Unter HTTPS `COOKIE_SECURE=true` setzen. Für lokale HTTP-Tests weglassen. Die Anwendung läuft standardmäßig auf Port 5500. Der Reverse Proxy muss WebSocket-Upgrades weiterleiten. PM2 weiterhin mit einer Instanz betreiben.
 
@@ -139,3 +139,12 @@ Das Slide Studio zeigt ungespeicherte Änderungen an. Beim Folienwechsel, Verlas
 In der Admin-Zentrale öffnet **Mitspieler einladen** einen QR-Code zur Teilnahmeadresse. Der Link kann kopiert, über die Gerätefreigabe geteilt und der QR-Code als SVG heruntergeladen werden. Die Erzeugung erfolgt auf dem eigenen Server ohne externen QR-Dienst. Unterpfade wie `/family/` bleiben erhalten. Bei lokalem Betrieb eine vom Handy erreichbare WLAN-Adresse eintragen, zum Beispiel `http://192.168.178.20:5500/`; `localhost` verweist auf das jeweilige Gerät. Der Link enthält keine Admin-Zugangsdaten.
 
 Beim Update **`npm ci` ausführen und den Server neu starten**, da für QR-Codes die Abhängigkeit `qrcode` hinzugekommen ist. Datenbank und Uploads beibehalten.
+
+### Admin-Passwort ohne Konsole neu festlegen
+
+1. Diese Version installieren und die Anwendung über das Hosting-Panel neu starten.
+2. Im Dateimanager oder per SFTP `data/admin-recovery-code.txt` im Projektordner öffnen und den Code kopieren. Bei einem eigenen `DB_PATH` liegt die Datei neben der Datenbank. Die Datei gehört nicht in `public/` und nicht auf GitHub.
+3. In der App den Admin-Zugang öffnen und **Passwort vergessen / neu festlegen** wählen.
+4. Den Code einfügen, ein eigenes Passwort zweimal eingeben und speichern. Danach mit dem neuen Passwort anmelden.
+
+Der Code gilt einmal und wird anschließend in derselben Datei ersetzt. Alle bisherigen Admin-Sitzungen werden beendet. Das Passwort bleibt bei Neustarts und Updates erhalten, solange die Datenbank erhalten bleibt. Eine spätere Änderung von `ADMIN_PASSWORD` überschreibt es nicht. Für eine weitere Wiederherstellung die Datei frisch vom Server öffnen. Die Datei ist nur für den Server-Dateieigentümer lesbar; der Dateimanager benötigt entsprechenden Zugriff. Bei entferntem Code erzeugt der nächste Serverstart einen neuen. Tourimport und Beispieldaten ändern das Passwort nicht.

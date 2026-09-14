@@ -7,8 +7,8 @@
   <meta name="description" content="Familienausflug-Rallye Companion App – Live-synchronisierte Stadtrallye und Quiz für die ganze Familie">
   <title>Familienausflug-Rallye</title>
   
-  <link rel="manifest" href="manifest.json?v=1.7.0">
-  <link rel="stylesheet" href="css/style.css?v=1.7.0">
+  <link rel="manifest" href="manifest.json?v=1.8.0">
+  <link rel="stylesheet" href="css/style.css?v=1.8.0">
   <!-- Leaflet Map CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script>
@@ -236,8 +236,22 @@
           🔓 Admin-Zentrale freischalten
         </button>
       </form>
+      <button type="button" id="admin-reset-open" class="btn-secondary" style="margin-top:14px">Passwort vergessen / neu festlegen</button>
     </div>
   </div>
+
+  <dialog id="admin-reset-dialog" class="rallye-dialog" aria-labelledby="admin-reset-title">
+    <h2 id="admin-reset-title">Admin-Passwort zurücksetzen</h2>
+    <p>Öffne über den Dateimanager oder SFTP die Datei <strong>data/admin-recovery-code.txt</strong> im Projektordner deines Servers. Kopiere den Code hierher. Nach erfolgreicher Nutzung wird er ersetzt.</p>
+    <form id="admin-reset-form" style="display:grid;gap:14px">
+      <label>Wiederherstellungscode<input id="admin-reset-code" class="input-field" type="password" required autocomplete="off" spellcheck="false"></label>
+      <label>Neues Passwort<input id="admin-reset-password" class="input-field" type="password" minlength="6" maxlength="256" required autocomplete="new-password"></label>
+      <label>Passwort wiederholen<input id="admin-reset-repeat" class="input-field" type="password" required autocomplete="new-password"></label>
+      <p id="admin-reset-status" role="status" aria-live="polite"></p>
+      <button class="submit-btn" type="submit">Passwort speichern</button>
+      <button class="btn-secondary" id="admin-reset-close" type="button">Schließen</button>
+    </form>
+  </dialog>
 
   <!-- DEDICATED FULLSCREEN ADMIN STUDIO WORKSPACE -->
   <div id="admin-modal" class="admin-fullscreen-view hidden">
@@ -720,13 +734,14 @@
   <!-- Scripts -->
   <!-- Leaflet Map JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="js/ui.js?v=1.7.0"></script>
-  <script src="js/audioSynth.js?v=1.7.0"></script>
-  <script src="js/confetti.js?v=1.7.0"></script>
-  <script src="js/odometer.js?v=1.7.0"></script>
-  <script src="js/editorGuard.js?v=1.7.0"></script>
-  <script src="js/admin.js?v=1.7.0"></script>
-  <script src="js/app.js?v=1.7.0"></script>
-<script src="js/invitations.js?v=1.7.0"></script>
+  <script src="js/ui.js?v=1.8.0"></script>
+  <script src="js/audioSynth.js?v=1.8.0"></script>
+  <script src="js/confetti.js?v=1.8.0"></script>
+  <script src="js/odometer.js?v=1.8.0"></script>
+  <script src="js/editorGuard.js?v=1.8.0"></script>
+  <script src="js/admin.js?v=1.8.0"></script>
+  <script src="js/app.js?v=1.8.0"></script>
+<script src="js/invitations.js?v=1.8.0"></script>
+<script src="js/adminRecovery.js?v=1.8.0"></script>
 </body>
 </html>

@@ -52,7 +52,7 @@ Die Überarbeitung wird im GitHub-Repository bereitgestellt. Ein laufender Serve
 
 Diese Version wurde unter Node.js 22 getestet; die Laufzeit ist in `package.json` eingetragen. Für lokal erzeugte QR-Einladungen wurde `qrcode` als Laufzeitabhängigkeit ergänzt; beim Update `npm ci` ausführen. Browser-Testwerkzeuge gehören nicht zum Projektpaket.
 
-Kein fest eingebautes Standardpasswort mehr: `ADMIN_PASSWORD` setzen oder das beim Serverstart angezeigte Zufallspasswort verwenden. Bestehende Spielertoken werden durch die Umstellung ungültig. Bereits belegte Namen werden nicht automatisch übernommen. Daten und Uploads bei einem Update erhalten, nicht erneut seeden. Details stehen in der README.
+Das Admin-Passwort ist dauerhaft als scrypt-Hash gespeichert. Zur Einrichtung und Wiederherstellung gibt es einen Frontend-Dialog mit einem einmaligen Code aus einer privaten Serverdatei. Bestehende Spielertoken werden durch die Umstellung ungültig. Bereits belegte Namen werden nicht automatisch übernommen. Daten und Uploads bei einem Update erhalten, nicht erneut seeden. Details stehen in der README.
 
 ## Prüfung
 
@@ -69,3 +69,7 @@ Headless Chromium: Anmeldung, Admin-Freischaltung, mobile Ansicht bei 390 × 844
 ### Prüfung von Entwurfsschutz und Einladungen
 
 Chromium: Abbrechen, Verwerfen und Speichern beim Wechsel, Entwurfswiederherstellung nach Neuladen, Erhalt der Eingabe bei simuliertem Speicherfehler sowie serverseitiges Sperren über das mobile Menü erfolgreich geprüft. Der erzeugte QR-Code wurde aus dem Bild zurückgelesen; die Teilnahmeadresse einschließlich `/family/` stimmt überein. Eine nachträgliche URL-Änderung deaktiviert den alten QR-Code. Die mobile Dialogansicht wurde bei 390 × 844 geprüft. REST-Regressionstests prüfen zusätzlich Zugriffsschutz, SVG-Ausgabe und ungültige Einladungsadressen.
+
+### Passwort-Wiederherstellung
+
+Dauerhafte Passwortspeicherung als gesalzener scrypt-Hash, Wiederherstellung über einen privaten Einmalcode und Widerruf aller Admin-Sitzungen. API-Tests prüfen ungültige und verbrauchte Codes, Passwortvalidierung, Codewechsel, Anmeldung mit dem neuen Passwort und fehlende öffentliche Auslieferung des Codes.

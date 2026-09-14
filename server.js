@@ -34,8 +34,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY, user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
   admin INTEGER NOT NULL DEFAULT 0, expires_at INTEGER NOT NULL
 )`);
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || randomBytes(12).toString('base64url');
-if (!process.env.ADMIN_PASSWORD) console.log(`🔑 Admin-Passwort für diesen Start: ${ADMIN_PASSWORD}`);
+const adminCredentials = require('./src/adminCredentials')(db);
 function session(token, admin = false) {
   if (typeof token !== 'string') return null;
   return db.prepare('SELECT * FROM sessions WHERE token = ? AND expires_at > ? AND admin = ?')
@@ -336,13 +335,31 @@ let failedAdminAttempts = 0;
 let adminRetryAt = 0;
 app.post('/api/admin/auth', (req, res) => {
   if (Date.now() < adminRetryAt) return res.status(429).json({ error: 'Zu viele Versuche. Bitte in einer Minute erneut versuchen.' });
-  if (req.body.password !== ADMIN_PASSWORD) {
+  if (!adminCredentials.verify(req.body.password)) {
     if (++failedAdminAttempts >= 10) { adminRetryAt = Date.now() + 60000; failedAdminAttempts = 0; }
     return res.status(401).json({ error: 'Falsches Admin-Passwort.' });
   }
   failedAdminAttempts = 0;
   const token = createSession(null, true);
   res.cookie('admin_token', token, cookieOptions(8 * 3600000));
+  res.json({ success: true });
+});
+let recoveryAttempts = 0;
+let recoveryRetryAt = 0;
+app.post('/api/admin/reset-password', (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  if (Date.now() < recoveryRetryAt) return res.status(429).json({ error: 'Zu viele Versuche. Bitte in einer Minute erneut versuchen.' });
+  const { code, password } = req.body;
+  if (typeof password !== 'string' || password.length < 6 || password.length > 256)
+    return res.status(400).json({ error: 'Das Passwort muss 6 bis 256 Zeichen enthalten.' });
+  if (!adminCredentials.reset(code, password)) {
+    if (++recoveryAttempts >= 10) { recoveryRetryAt = Date.now() + 60000; recoveryAttempts = 0; }
+    return res.status(401).json({ error: 'Wiederherstellungscode ungültig oder bereits verwendet.' });
+  }
+  recoveryAttempts = 0;
+  failedAdminAttempts = 0;
+  adminRetryAt = 0;
+  res.clearCookie('admin_token', { path: '/' });
   res.json({ success: true });
 });
 app.use('/api/admin', (req, res, next) => {

@@ -9,3 +9,6 @@ public/uploads/*
 .DS_Store
 Thumbs.db
 *.tmp
+
+# Private server-side recovery token (also for custom DB_PATH locations)
+admin-recovery-code.txt

@@ -92,7 +92,7 @@ async function runE2E() {
     assert.strictEqual(loginRes.data.user.name, 'Max Mustermann');
 
     // 3. Admin Password Authentication Test
-    console.log('3. Teste Admin-Passwort Authentifizierung (casaxx)...');
+    console.log('3. Teste Admin-Passwort Authentifizierung...');
     const wrongPwRes = await request(`${baseUrl}/api/admin/auth`, { method: 'POST' }, {
       password: 'falschesPasswort',
       userId: token
@@ -103,7 +103,7 @@ async function runE2E() {
       password: 'test-only-password',
       userId: token
     });
-    assert.strictEqual(correctPwRes.status, 200, 'Korrektes Passwort casaxx muss 200 liefern');
+    assert.strictEqual(correctPwRes.status, 200, 'Korrektes Passwort muss 200 liefern');
     assert.strictEqual(correctPwRes.data.success, true);
     adminCookie = correctPwRes.headers['set-cookie'][0].split(';')[0];
 
@@ -250,6 +250,20 @@ async function runE2E() {
     for (const url of ['javascript:alert(1)', 'https://user:password@example.test/', 'invalid']) {
       assert.strictEqual((await request(`${baseUrl}/api/admin/invite-qr`, { method: 'POST' }, { url })).status, 400);
     }
+    console.log('11. Passwort-Wiederherstellung: privater Einmalcode und Sitzungswiderruf...');
+    const recoveryPath = path.join(testDir, 'admin-recovery-code.txt');
+    const recoveryCode = require('fs').readFileSync(recoveryPath, 'utf8').trim();
+    const reset = (code, password) => request(`${baseUrl}/api/admin/reset-password`, { method: 'POST' }, { code, password });
+    assert.strictEqual((await reset('0'.repeat(64), 'new-test-password')).status, 401);
+    assert.strictEqual((await reset(recoveryCode, 'short')).status, 400);
+    assert.strictEqual((await reset(recoveryCode, 'new-test-password')).status, 200);
+    assert.strictEqual((await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' })).status, 401);
+    assert.strictEqual((await reset(recoveryCode, 'another-test-password')).status, 401);
+    assert.notStrictEqual(require('fs').readFileSync(recoveryPath, 'utf8').trim(), recoveryCode);
+    assert.strictEqual((await request(`${baseUrl}/api/admin/auth`, { method: 'POST' }, { password: 'test-only-password' })).status, 401);
+    assert.strictEqual((await request(`${baseUrl}/api/admin/auth`, { method: 'POST' }, { password: 'new-test-password' })).status, 200);
+    const exposed = await request(`${baseUrl}/data/admin-recovery-code.txt`);
+    assert.ok(!String(exposed.text || JSON.stringify(exposed.data)).includes(recoveryCode));
     await request(`${baseUrl}/api/admin/logout`, { method: 'POST' });
     assert.strictEqual((await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' })).status, 401);
 
