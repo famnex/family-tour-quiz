@@ -99,6 +99,7 @@ class AdminController {
       }
       adminMobileDrawer?.classList.add('hidden');
       adminModal?.classList.add('hidden');
+      if (!window.app?.user) document.getElementById('auth-modal')?.classList.remove('hidden');
     };
     mobileLockBtn?.addEventListener('click', () => closeWorkspace(true));
     mobileCloseBtn?.addEventListener('click', () => closeWorkspace());
@@ -349,7 +350,7 @@ class AdminController {
     const resetTourBtn = document.getElementById('admin-reset-tour-btn');
     if (resetTourBtn) {
       resetTourBtn.addEventListener('click', () => {
-        if (confirm('Möchtest du die gesamte Rallye und alle Punkte wirklich zurücksetzen?')) {
+        if (confirm('Möchtest du die Rallye zurücksetzen? Alle Teilnehmerkonten, Anmeldungen und Antworten werden gelöscht. Die Tourfolien und dein Admin-Zugang bleiben erhalten.')) {
           this.resetTour();
         }
       });

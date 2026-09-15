@@ -435,6 +435,17 @@ class RallyeApp {
 
   renderState(state) {
     if (!state) return;
+    if (this.user && Array.isArray(state.participants_status) && !state.participants_status.some(p => p.id === this.user.id)) {
+      for (const key of ['rallye_auth_token', 'rallye_username', 'rallye_user_emoji', 'rallye_user_color']) localStorage.removeItem(key);
+      this.user = null;
+      this.token = null;
+      this.localSubmissions = {};
+      this.currentEstSlideId = null;
+      this.odometer?.set(0, false);
+      document.getElementById('user-display-name').textContent = 'Gast';
+      if (!window.admin?.isAdminUnlocked()) document.getElementById('auth-modal').classList.remove('hidden');
+    }
+    if (!state) return;
     this.state = state;
     this.serverOffset = state.server_time ? state.server_time - Date.now() : 0;
     const progress = document.getElementById('tour-progress-fill');

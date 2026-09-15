@@ -306,8 +306,6 @@ app.post('/api/auth/login', (req, res) => {
   const color = /^#[0-9a-f]{6}$/i.test(avatar_color || '') ? avatar_color : '#4f46e5';
   const emoji = typeof avatar_emoji === 'string' && avatar_emoji.length <= 12 ? avatar_emoji : '🌟';
   let user = db.prepare('SELECT * FROM users WHERE name = ? COLLATE NOCASE').get(cleanName);
-  if (user && user.id !== playerId(req))
-    return res.status(409).json({ error: 'Dieser Name spielt bereits mit. Bitte ergänze z. B. einen Nachnamensbuchstaben.' });
   if (!user) {
     const id = uuidv4();
     db.prepare(`INSERT INTO users (id,name,role,avatar_color,avatar_emoji,score,created_at,last_seen)
@@ -739,7 +737,8 @@ app.post('/api/admin/reset-rallye', (req, res) => {
   if (activeTimerTimeout) { clearTimeout(activeTimerTimeout); activeTimerTimeout = null; }
   const resetTx = db.transaction(() => {
     db.prepare('DELETE FROM quiz_submissions').run();
-    db.prepare('UPDATE users SET score = 0').run();
+    db.prepare('DELETE FROM sessions WHERE admin = 0').run();
+    db.prepare('DELETE FROM users').run();
     
     const firstSlide = db.prepare('SELECT id FROM slides ORDER BY order_index ASC LIMIT 1').get();
     db.prepare(`

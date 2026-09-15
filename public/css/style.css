@@ -1912,3 +1912,13 @@ button:disabled { cursor: not-allowed; }
 .invite-qr:not(:empty) { background: white; border-radius: 12px; margin: 20px auto; width: min(100%, 320px); padding: 8px; }
 .invite-qr svg { width: 100%; height: auto; display: block; }
 #invite-status { font-size: .9rem; }
+
+/* The live stage scrolls only as far as its content; the footer has its own row. */
+body { min-height: 100dvh; }
+#app { height: 100dvh; min-height: 0; overflow: hidden; touch-action: pan-x pan-y; }
+#app > header, #app > .announcement-bar { flex-shrink: 0; }
+#app > main { min-height: 0; overflow-y: auto; overscroll-behavior-y: none; padding: 12px; }
+#app > main > * { flex-shrink: 0; }
+#app > .app-footer { position: static; flex-shrink: 0; padding: 6px 14px calc(6px + env(safe-area-inset-bottom)); }
+.tour-welcome { margin-bottom: 12px; }
+#app input, #app select, #app textarea { font-size: max(16px, 1em); }

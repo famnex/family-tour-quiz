@@ -119,7 +119,7 @@ Das Admin-Passwort wird dauerhaft als gesalzener scrypt-Hash in der Datenbank ge
 
 Unter HTTPS `COOKIE_SECURE=true` setzen. Für lokale HTTP-Tests weglassen. Die Anwendung läuft standardmäßig auf Port 5500. Der Reverse Proxy muss WebSocket-Upgrades weiterleiten. PM2 weiterhin mit einer Instanz betreiben.
 
-Spielersitzungen benutzen jetzt separate Tokens. Alte Anmeldungen werden dadurch ungültig; ein bereits belegter Name wird nicht mehr automatisch übernommen. Vor einer neuen Tour kann die Tourleitung alte Teilnehmer entfernen, oder der Spieler verwendet einen unterscheidbaren Namen. Bestehende Tourinhalte bleiben erhalten. Vor dem Austausch der Anwendung den Server stoppen und `data/` sowie `public/uploads/` sichern und beibehalten. `npm run seed` ersetzt die Tour durch Beispieldaten und gehört nicht in einen Updateablauf.
+Spielersitzungen benutzen jetzt separate Tokens. Die Anmeldung mit einem bestehenden Namen öffnet dasselbe Spielerkonto einschließlich Punktestand. Groß-/Kleinschreibung und äußere Leerzeichen werden dabei ignoriert. „Rallye zurücksetzen & Teilnehmer löschen“ löscht alle Spielerkonten, Spielersitzungen und Antworten; Tourfolien und Admin-Zugang bleiben erhalten. Bestehende Tourinhalte bleiben erhalten. Vor dem Austausch der Anwendung den Server stoppen und `data/` sowie `public/uploads/` sichern und beibehalten. `npm run seed` ersetzt die Tour durch Beispieldaten und gehört nicht in einen Updateablauf.
 
 ### Lokaler Start unter Linux/macOS
 
@@ -148,3 +148,5 @@ Beim Update **`npm ci` ausführen und den Server neu starten**, da für QR-Codes
 4. Den Code einfügen, ein eigenes Passwort zweimal eingeben und speichern. Danach mit dem neuen Passwort anmelden.
 
 Der Code gilt einmal und wird anschließend in derselben Datei ersetzt. Alle bisherigen Admin-Sitzungen werden beendet. Das Passwort bleibt bei Neustarts und Updates erhalten, solange die Datenbank erhalten bleibt. Eine spätere Änderung von `ADMIN_PASSWORD` überschreibt es nicht. Für eine weitere Wiederherstellung die Datei frisch vom Server öffnen. Die Datei ist nur für den Server-Dateieigentümer lesbar; der Dateimanager benötigt entsprechenden Zugriff. Bei entferntem Code erzeugt der nächste Serverstart einen neuen. Tourimport und Beispieldaten ändern das Passwort nicht.
+
+Die Liveansicht verzichtet auf Begrüßungstexte und das ausgeschriebene Verbindungssignal. Der Statuspunkt bleibt erhalten. Nur der Inhaltsbereich scrollt; die Fußleiste nimmt eigenen Platz ein. Pinch- und Doppeltipp-Zoom werden in der Livefläche über Touch-Regeln und Gestenbehandlung unterbunden, soweit der Browser dies zulässt.

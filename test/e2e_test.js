@@ -130,8 +130,7 @@ async function runE2E() {
     // 5. Admin sets Quiz Slide & Steps through 5 Phases
     console.log('5. Teste Phasenablauf (Phase 1 bis 5)...');
     
-    // Reset rallye to start clean
-    await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' });
+    // The isolated database was seeded before login; reset is tested at the end.
 
     // Switch to slide 2 (multiple choice)
     const setSlideRes = await request(`${baseUrl}/api/admin/set-slide`, { method: 'POST' }, { slide_index: 1 });
@@ -227,7 +226,10 @@ async function runE2E() {
     assert.ok(publicSlides.data.every(s => !('admin_notes' in s) && !('correct_option_index' in s) && !('target_value' in s)));
     assert.notStrictEqual(token, loginRes.data.user.id);
     assert.strictEqual((await request(`${baseUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${loginRes.data.user.id}` } })).status, 401);
-    assert.strictEqual((await request(`${baseUrl}/api/auth/login`, { method: 'POST' }, { name: 'Max Mustermann' })).status, 409);
+    const repeatLogin = await request(`${baseUrl}/api/auth/login`, { method: 'POST' }, { name: '  max mustermann  ' });
+    assert.strictEqual(repeatLogin.status, 200);
+    assert.strictEqual(repeatLogin.data.user.id, loginRes.data.user.id);
+    assert.notStrictEqual(repeatLogin.data.token, token);
     adminCookie = savedCookie;
     await request(`${baseUrl}/api/admin/set-slide`, { method: 'POST' }, { slide_index: 1 });
     const hiddenState = await request(`${baseUrl}/api/state`);
@@ -272,6 +274,18 @@ async function runE2E() {
     assert.ok(Array.isArray(stateCheck.data.participants_status), 'participants_status muss ein Array sein');
     assert.ok(stateCheck.data.participants_status.length >= 1, 'Mindestens 1 Spieler in participants_status');
 
+    const freshAdmin = await request(`${baseUrl}/api/admin/auth`, { method: 'POST' }, { password: 'new-test-password' });
+    adminCookie = freshAdmin.headers['set-cookie'][0].split(';')[0];
+    assert.strictEqual((await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' })).status, 200);
+    const resetState = await request(`${baseUrl}/api/state`);
+    assert.strictEqual(resetState.data.participants_status.length, 0);
+    assert.strictEqual(resetState.data.phase, 1);
+    assert.strictEqual(resetState.data.timer.status, 'stopped');
+    assert.strictEqual((await request(`${baseUrl}/api/auth/me`, { headers: { Authorization: `Bearer ${token}` } })).status, 401);
+    const newPlayer = await request(`${baseUrl}/api/auth/login`, { method: 'POST' }, { name: 'Max Mustermann' });
+    assert.notStrictEqual(newPlayer.data.user.id, loginRes.data.user.id);
+    assert.strictEqual(newPlayer.data.user.score, 0);
+    assert.strictEqual((await request(`${baseUrl}/api/admin/invite-qr`, { method: 'POST' }, { url: 'https://example.test/' })).status, 200);
     ws.close();
     console.log('✅ ALLE END-TO-END TESTS ERFOLGREICH BESTANDEN!');
   } finally {

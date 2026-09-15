@@ -9,7 +9,7 @@ Die Überarbeitung wird im GitHub-Repository bereitgestellt. Ein laufender Serve
 | Priorität | Befund im Ausgangscode | Umsetzung / betroffene Dateien |
 |---|---|---|
 | Kritisch | Admin-Endpunkte konnten ohne Passwortprüfung Folien und Teilnehmer löschen, Touren ersetzen und das Quiz steuern. Die Freischaltung war überwiegend ein Browserzustand. | Server prüft eine separate, zeitlich begrenzte Admin-Sitzung vor allen geschützten Endpunkten. Sperren widerruft die Sitzung. `server.js`, `public/js/admin.js`. |
-| Kritisch | Öffentlich sichtbare Spieler-IDs dienten zugleich als Anmeldetoken; Namen konnten fremde Profile übernehmen. | Zufällige Sitzungstoken getrennt von öffentlichen IDs, Tokenprüfung auch bei WebSocket-Identifikation, keine Übernahme eines belegten Namens. `server.js`, `public/js/app.js`. |
+| Kritisch | Öffentlich sichtbare Spieler-IDs dienten zugleich als Anmeldetoken; Namen konnten fremde Profile übernehmen. | Zufällige Sitzungstoken getrennt von öffentlichen IDs, Tokenprüfung auch bei WebSocket-Identifikation, auf Nutzerwunsch Wiederanmeldung in dasselbe Konto über den Namen. `server.js`, `public/js/app.js`. |
 | Hoch | Quizlösungen, Zielwerte und angeblich private Admin-Notizen wurden über Folien-API und Live-Zustand an alle ausgeliefert. | Rollenabhängige Ausgabefilter; Lösungen für Mitspieler erst bei Auflösung, private Notizen nur für gültige Admin-Sitzungen. `server.js`. |
 | Hoch | Gestoppte Timer akzeptierten weiterhin Antworten; eine verspätete Server-Zeitüberschreitung konnte die Abgabe verlängern. | Abgabe nur bei laufendem Timer, Phase 3 und nicht überschrittener Serverfrist. Wiederaufnahme der ursprünglichen Frist nach Serverneustart. `server.js`. |
 | Hoch | Schätzfragen meldeten schon beim Tippen Erfolg und speicherten Zwischenwerte; beim Ablauf wurde nochmals gesendet. | Explizite Abgabe, echte Serverbestätigung, sichtbare Fehlermeldung, normales Zahlenfeld auch für Dezimalzahlen. `public/js/app.js`. |
@@ -30,7 +30,7 @@ Die Überarbeitung wird im GitHub-Repository bereitgestellt. Ein laufender Serve
 - Ruhigerer dunkler Hintergrund mit mintfarbenen Akzenten, stärkerer typografischer Hierarchie und klareren Kartenflächen.
 - Sichtbarer Tourfortschritt und ausgeschriebener Verbindungsstatus.
 - Erklärende Wartehinweise vor der Antwortfreigabe.
-- Größere Touch-Flächen, sichtbarer Tastaturfokus, wieder erlaubter Seitenzoom und Safe-Area-Abstand am unteren Bildschirmrand.
+- Größere Touch-Flächen, sichtbarer Tastaturfokus, Zoom-Sperre in der Livefläche auf Nutzerwunsch und Safe-Area-Abstand am unteren Bildschirmrand.
 - Zahlenfeld bleibt während Live-Aktualisierungen bestehen; Fokus und Eingabe werden nicht bei jedem Heartbeat zerstört.
 - Dezimalkomma und Dezimalpunkt werden akzeptiert. Eine Änderung ist erst nach erneuter Abgabe gespeichert.
 - Rückmeldungen für gespeicherte Antworten und fehlgeschlagene Aktionen.
@@ -40,7 +40,7 @@ Die Überarbeitung wird im GitHub-Repository bereitgestellt. Ein laufender Serve
 
 1. **Tour-Generalprobe / Teilnehmervorschau.** Im Studio eine Vorschau aller fünf Phasen mit einem simulierten Mitspieler anbieten. So fallen fehlende Antworten, schlecht lesbare Bilder und ungeeignete Zeiten vor dem Ausflug auf.
 2. **Löschen rückgängig machen.** Entwurfsschutz mit Speichern/Verwerfen/Abbrechen und Wiederherstellung nach Neuladen ist umgesetzt. Als nächster Schritt fehlt eine Rückgängig-Funktion für gelöschte Folien.
-3. **Wiederanmeldung.** QR-Einladungen mit Kopieren, Teilen und SVG-Download sind umgesetzt. Als nächster Schritt bietet sich ein Wiederherstellungscode je Spieler an. Damit lassen sich Gerätewechsel und gleiche Vornamen sauber lösen, ohne die unsichere Anmeldung allein über den Namen wieder einzuführen.
+3. **Wiederanmeldung.** QR-Einladungen mit Kopieren, Teilen und SVG-Download sind umgesetzt. Als nächster Schritt bietet sich ein Wiederherstellungscode je Spieler an. Aktuell genügt auf Nutzerwunsch der Name zur Wiederanmeldung im bestehenden Konto.
 4. **Familienfreundliche Wertung.** Optional Geschwindigkeitsbonus deaktivieren, Teamspiel erlauben und kooperative Gesamtziele ergänzen. Für Kinder und schwankendes Mobilfunknetz ist eine rein zeitabhängige Rangfolge oft frustrierend.
 5. **Verlässliche Vorbereitung unterwegs.** Medien vor der Tour gezielt herunterladen und Downloadstatus anzeigen. Live-Spiel benötigt weiterhin Serverkontakt. Externe Karten, CDN-Skripte und Bilder werden nicht vollständig offline bereitgestellt.
 6. **Zustandslogik bündeln.** Phasenwechsel, Timer, Auswertung und Folienwechsel als zentrale Übergänge mit klaren Regeln behandeln. `server.js` danach in Auth-, Tour-, Quiz- und Medienmodule aufteilen. Das erleichtert Wiederholungsrunden und verhindert Sonderfälle beim manuellen Zurückspringen.
@@ -52,7 +52,7 @@ Die Überarbeitung wird im GitHub-Repository bereitgestellt. Ein laufender Serve
 
 Diese Version wurde unter Node.js 22 getestet; die Laufzeit ist in `package.json` eingetragen. Für lokal erzeugte QR-Einladungen wurde `qrcode` als Laufzeitabhängigkeit ergänzt; beim Update `npm ci` ausführen. Browser-Testwerkzeuge gehören nicht zum Projektpaket.
 
-Das Admin-Passwort ist dauerhaft als scrypt-Hash gespeichert. Zur Einrichtung und Wiederherstellung gibt es einen Frontend-Dialog mit einem einmaligen Code aus einer privaten Serverdatei. Bestehende Spielertoken werden durch die Umstellung ungültig. Bereits belegte Namen werden nicht automatisch übernommen. Daten und Uploads bei einem Update erhalten, nicht erneut seeden. Details stehen in der README.
+Das Admin-Passwort ist dauerhaft als scrypt-Hash gespeichert. Zur Einrichtung und Wiederherstellung gibt es einen Frontend-Dialog mit einem einmaligen Code aus einer privaten Serverdatei. Bestehende Spielertoken werden durch die Umstellung ungültig. Bereits vorhandene Namen öffnen auf Nutzerwunsch dasselbe Spielerkonto. Daten und Uploads bei einem Update erhalten, nicht erneut seeden. Details stehen in der README.
 
 ## Prüfung
 
