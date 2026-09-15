@@ -173,6 +173,10 @@ function initSchema() {
     db.exec(`ALTER TABLE app_state ADD COLUMN media_status TEXT NOT NULL DEFAULT 'stopped';`);
   } catch (e) {}
 
+  if (!db.prepare('PRAGMA table_info(slides)').all().some(column => column.name === 'show_on_route')) {
+    db.exec('ALTER TABLE slides ADD COLUMN show_on_route INTEGER NOT NULL DEFAULT 1 CHECK (show_on_route IN (0, 1))');
+  }
+
   // Ensure singleton row in app_state exists
   const existingState = db.prepare('SELECT id FROM app_state WHERE id = 1').get();
   if (!existingState) {

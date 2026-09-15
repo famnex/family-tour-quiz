@@ -430,6 +430,8 @@ main {
 }
 
 .slide-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-size: 0.85rem;
   line-height: 1.35;
   color: #cbd5e1;

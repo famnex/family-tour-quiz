@@ -184,11 +184,13 @@ async function runE2E() {
     const createSlideRes = await request(`${baseUrl}/api/admin/slides`, { method: 'POST' }, {
       type: 'info',
       title: 'Neuer GPS Testpunkt',
-      description: 'Teststation fuer Koordinaten',
+      description: 'Erste Zeile\n\nDritte Zeile',
       latitude: 50.9801,
       longitude: 11.0345
     });
     assert.strictEqual(createSlideRes.status, 200);
+    assert.strictEqual(createSlideRes.data.slide.show_on_route, 1);
+    assert.strictEqual(createSlideRes.data.slide.description, 'Erste Zeile\n\nDritte Zeile');
     assert.strictEqual(createSlideRes.data.slide.latitude, 50.9801);
     assert.strictEqual(createSlideRes.data.slide.longitude, 11.0345);
 
@@ -196,11 +198,26 @@ async function runE2E() {
       type: 'transit',
       title: 'Aktualisierter GPS Testpunkt',
       latitude: 50.9815,
-      longitude: 11.0360
+      longitude: 11.0360,
+      show_on_route: false
     });
     assert.strictEqual(updateSlideRes.status, 200);
+    assert.strictEqual(updateSlideRes.data.slide.show_on_route, 0);
     assert.strictEqual(updateSlideRes.data.slide.latitude, 50.9815);
     assert.strictEqual(updateSlideRes.data.slide.longitude, 11.0360);
+
+    const legacyUpdate = await request(`${baseUrl}/api/admin/slides/${createSlideRes.data.slide.id}`, { method: 'PUT' }, {
+      type: 'info', title: 'Legacy Update', description: 'Zeile 1\nZeile 2', latitude: 50.9815, longitude: 11.0360
+    });
+    assert.strictEqual(legacyUpdate.data.slide.show_on_route, 0, 'Older clients preserve opt-out');
+    const exported = await request(`${baseUrl}/api/admin/tour/export`);
+    assert.strictEqual(exported.data.slides.find(s => s.id === createSlideRes.data.slide.id).show_on_route, 0);
+    const imported = await request(`${baseUrl}/api/admin/tour/import`, { method: 'POST' }, { tour_data: exported.data });
+    assert.strictEqual(imported.status, 200);
+    const restoredSlides = await request(`${baseUrl}/api/slides`);
+    const restoredSlide = restoredSlides.data.find(s => s.id === createSlideRes.data.slide.id);
+    assert.strictEqual(restoredSlide.show_on_route, 0);
+    assert.strictEqual(restoredSlide.description, 'Zeile 1\nZeile 2');
 
     // 8. Test Media Upload (Bug 3 Fix verification)
     console.log('8. Teste Medien-Upload API (/api/admin/upload)...');

@@ -1261,6 +1261,7 @@ class AdminController {
     document.getElementById('edit-slide-type').value = slide.type;
     document.getElementById('edit-slide-title').value = slide.title || '';
     document.getElementById('edit-slide-desc').value = slide.description || '';
+    document.getElementById('edit-slide-show-on-route').checked = slide.show_on_route !== 0 && slide.show_on_route !== false;
     document.getElementById('edit-slide-location').value = slide.location_name || '';
     document.getElementById('edit-slide-meeting').value = slide.meeting_time || '';
     document.getElementById('edit-slide-media-type').value = slide.media_type || 'image';
@@ -1426,6 +1427,7 @@ class AdminController {
     const payload = {
       type, title, description, location_name, meeting_time, media_type, media_url, audio_url,
       max_points, countdown_seconds, admin_notes, latitude, longitude,
+      show_on_route: document.getElementById('edit-slide-show-on-route').checked,
       question, options, correct_option_index,
       target_value, scale_factor
     };
@@ -1694,11 +1696,11 @@ class AdminController {
 
     // Sort all slides by order_index
     const orderedSlides = [...this.allSlides].sort((a, b) => a.order_index - b.order_index);
-    const validSlides = orderedSlides.filter(s => s.latitude !== null && s.latitude !== undefined && s.longitude !== null && s.longitude !== undefined);
+    const validSlides = orderedSlides.filter(s => s.show_on_route !== 0 && s.show_on_route !== false && s.latitude !== null && s.latitude !== undefined && s.longitude !== null && s.longitude !== undefined);
 
     const statsBadge = document.getElementById('route-stats-badge');
     if (statsBadge) {
-      statsBadge.textContent = `${validSlides.length} von ${orderedSlides.length} Stationen mit GPS`;
+      statsBadge.textContent = `${validSlides.length} von ${orderedSlides.length} Stationen auf der Route`;
     }
 
     if (validSlides.length === 0) return;

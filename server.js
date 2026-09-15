@@ -396,6 +396,7 @@ app.post('/api/admin/invite-qr', async (req, res) => {
 function validateSlide(s) {
   if (!s || typeof s !== 'object' || !['info','transit','action','multiple_choice','estimation','summary'].includes(s.type) || typeof s.title !== 'string' || !s.title.trim() || s.title.length > 200) return 'Titel und gültigen Folientyp angeben.';
   if (s.id !== undefined && (typeof s.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(s.id))) return 'Ungültige Folien-ID.';
+  if (s.show_on_route !== undefined && ![true, false, 0, 1].includes(s.show_on_route)) return 'Ungültige Routenanzeige.';
   for (const key of ['description','location_name','meeting_time','question','admin_notes'])
     if (s[key] != null && (typeof s[key] !== 'string' || s[key].length > 20000)) return 'Ungültiges Textfeld: ' + key;
   for (const key of ['media_url','audio_url']) {
@@ -829,7 +830,7 @@ app.post('/api/admin/slides', (req, res) => {
     type, title, description, location_name, meeting_time,
     media_url, audio_url, media_type, question, options, correct_option_index,
     target_value, tolerance, scale_factor, max_points, countdown_seconds, admin_notes,
-    latitude, longitude
+    latitude, longitude, show_on_route
   } = req.body;
 
   if (!title || !type) {
@@ -846,13 +847,13 @@ app.post('/api/admin/slides', (req, res) => {
       location_name, meeting_time, media_url, audio_url, media_type,
       question, options_json, correct_option_index,
       target_value, tolerance, scale_factor, max_points, countdown_seconds, admin_notes,
-      latitude, longitude, created_at
+      latitude, longitude, show_on_route, created_at
     ) VALUES (
       ?, 'default', ?, ?, ?, ?,
       ?, ?, ?, ?, ?,
       ?, ?, ?,
       ?, ?, ?, ?, ?, ?,
-      ?, ?, datetime('now')
+      ?, ?, ?, datetime('now')
     )
   `).run(
     id, newOrder, type, title, description || null,
@@ -861,7 +862,8 @@ app.post('/api/admin/slides', (req, res) => {
     target_value !== undefined ? target_value : null, tolerance ?? 10, scale_factor ?? 100, max_points ?? 100, countdown_seconds || 20,
     admin_notes || null,
     latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null,
-    longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null
+    longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null,
+    show_on_route === false || show_on_route === 0 ? 0 : 1
   );
 
   bumpContentVersion();
@@ -880,10 +882,10 @@ app.put('/api/admin/slides/:id', (req, res) => {
     type, title, description, location_name, meeting_time,
     media_url, audio_url, media_type, question, options, correct_option_index,
     target_value, tolerance, scale_factor, max_points, countdown_seconds, admin_notes,
-    latitude, longitude
+    latitude, longitude, show_on_route
   } = req.body;
 
-  const existing = db.prepare('SELECT id FROM slides WHERE id = ?').get(id);
+  const existing = db.prepare('SELECT id, show_on_route FROM slides WHERE id = ?').get(id);
   if (!existing) {
     return res.status(404).json({ error: 'Folie nicht gefunden' });
   }
@@ -895,7 +897,7 @@ app.put('/api/admin/slides/:id', (req, res) => {
       question = ?, options_json = ?, correct_option_index = ?,
       target_value = ?, tolerance = ?, scale_factor = ?, max_points = ?, countdown_seconds = ?,
       admin_notes = ?,
-      latitude = ?, longitude = ?
+      latitude = ?, longitude = ?, show_on_route = ?
     WHERE id = ?
   `).run(
     type, title, description || null,
@@ -905,6 +907,7 @@ app.put('/api/admin/slides/:id', (req, res) => {
     admin_notes || null,
     latitude !== undefined && latitude !== null && latitude !== '' ? parseFloat(latitude) : null,
     longitude !== undefined && longitude !== null && longitude !== '' ? parseFloat(longitude) : null,
+    show_on_route === undefined ? existing.show_on_route : (show_on_route === false || show_on_route === 0 ? 0 : 1),
     id
   );
 
@@ -1024,13 +1027,13 @@ app.post('/api/admin/tour/import', (req, res) => {
         location_name, meeting_time, media_url, audio_url, media_type,
         question, options_json, correct_option_index, target_value,
         tolerance, scale_factor, max_points, countdown_seconds, admin_notes,
-        latitude, longitude, created_at
+        latitude, longitude, show_on_route, created_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
         ?, ?, ?, ?, ?,
-        ?, ?, datetime('now')
+        ?, ?, ?, datetime('now')
       )
     `);
 
@@ -1065,7 +1068,8 @@ app.post('/api/admin/tour/import', (req, res) => {
           s.countdown_seconds !== undefined ? s.countdown_seconds : 20,
           s.admin_notes || null,
           s.latitude !== undefined ? s.latitude : null,
-          s.longitude !== undefined ? s.longitude : null
+          s.longitude !== undefined ? s.longitude : null,
+          s.show_on_route === false || s.show_on_route === 0 ? 0 : 1
         );
       });
 
