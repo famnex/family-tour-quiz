@@ -28,6 +28,15 @@ class RallyeApp {
   async init() {
     this.initOdometer();
     this.bindEvents();
+    const resizeMedia = () => this.scheduleMediaFit();
+    this.mediaResizeObserver = new ResizeObserver(resizeMedia);
+    for (const selector of ['#app > main', '#slide-title', '#slide-description', '#stage-quiz-col']) {
+      const element = document.querySelector(selector);
+      if (element) this.mediaResizeObserver.observe(element);
+    }
+    window.addEventListener('resize', resizeMedia);
+    window.visualViewport?.addEventListener('resize', resizeMedia);
+    document.fonts?.ready.then(resizeMedia);
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register(window.apiUrl('/sw.js'), { scope: window.apiUrl('/') })
@@ -493,6 +502,53 @@ class RallyeApp {
     document.getElementById('est-number-input')?.focus({ preventScroll: true });
   }
 
+  scheduleMediaFit() {
+    if (this.mediaFitFrame) return;
+    this.mediaFitFrame = requestAnimationFrame(() => {
+      this.mediaFitFrame = null;
+      this.fitSlideMedia();
+    });
+  }
+
+  fitSlideMedia() {
+    const main = document.querySelector('#app > main');
+    const box = document.getElementById('slide-media-container');
+    const card = document.getElementById('slide-stage-card');
+    if (!main || !box || !card?.getClientRects().length || box.classList.contains('hidden')) return;
+    if (document.fullscreenElement || box.querySelector('video')?.webkitDisplayingFullscreen) return;
+    if (!box.querySelector('img, video')) {
+      box.style.removeProperty('--media-height');
+      return;
+    }
+    const oldScroll = main.scrollTop;
+    const bounds = main.getBoundingClientRect();
+    const footerHeight = document.querySelector('#app > .app-footer')?.getBoundingClientRect().height || 0;
+    const available = Math.min(main.clientHeight,
+      (window.visualViewport?.height || window.innerHeight) - bounds.top - footerHeight);
+    const paddingBottom = parseFloat(getComputedStyle(main).paddingBottom) || 0;
+    const fits = () => {
+      const bottom = Math.max(...[...main.children].filter(el => el.getClientRects().length)
+        .map(el => el.getBoundingClientRect().bottom - bounds.top + main.scrollTop));
+      return bottom + paddingBottom <= available - 2;
+    };
+    // Measure the compact layout first, then use only genuinely spare room.
+    // This also handles the two-column desktop layout without guessing text heights.
+    let low = 80;
+    let high = Math.max(low, Math.min(480, Math.floor(box.clientWidth * 0.75)));
+    box.style.setProperty('--media-height', low + 'px');
+    if (fits()) {
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        box.style.setProperty('--media-height', mid + 'px');
+        if (fits()) low = mid;
+        else high = mid - 1;
+      }
+    }
+    box.style.setProperty('--media-height', low + 'px');
+    // Measurement must not move an already-scrolled answer list.
+    main.scrollTop = oldScroll;
+  }
+
   scrollToNewAnswers(state) {
     const slide = state.current_slide;
     const targetId = slide?.type === 'multiple_choice' && [2, 3].includes(state.phase)
@@ -771,6 +827,7 @@ class RallyeApp {
   }
 
   renderQuizPhase(state) {
+    this.scheduleMediaFit();
     const slide = state.current_slide;
     const stageCard = document.getElementById('slide-stage-card');
     const stageGrid = document.getElementById('stage-grid');
