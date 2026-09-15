@@ -369,7 +369,7 @@ window.soundFx = new AudioSynth();
   const button = document.getElementById('sound-toggle-btn');
   const update = () => {
     const ready = sound.ctx?.state === 'running';
-    button.textContent = sound.isMuted ? '🔇 Ton aus' : ready ? '🔊' : '🔈 Ton aktivieren';
+    button.textContent = sound.isMuted ? '🔇' : ready ? '🔊' : '🔈';
     button.title = sound.isMuted || !ready ? 'Ton aktivieren und testen' : 'Ton ausschalten';
     button.setAttribute('aria-label', button.title);
     button.setAttribute('aria-pressed', String(!sound.isMuted && ready));

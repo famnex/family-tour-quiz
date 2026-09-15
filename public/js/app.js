@@ -391,7 +391,7 @@ class RallyeApp {
         break;
 
       case 'media_control':
-        this.syncMediaPlayback(data.media_status);
+        this.syncMediaPlayback(data.media_status, true);
         break;
 
       case 'announcement':
@@ -597,6 +597,7 @@ class RallyeApp {
       if (isNewSlide || !mediaContainer.dataset.renderedSlideId || mediaContainer.dataset.renderedSlideId !== slide.id) {
         mediaContainer.dataset.renderedSlideId = slide.id;
         mediaContainer.onclick = null;
+        mediaContainer.querySelector('#active-media-player')?.pause();
         mediaContainer.innerHTML = '';
         mediaContainer.classList.remove('media-unavailable');
 
@@ -610,7 +611,7 @@ class RallyeApp {
 
           if (mediaType === 'video') {
             mediaContainer.innerHTML = `
-              <video id="active-media-player" src="${window.escapeHtml(slide.media_url)}" controls playsinline style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);"></video>
+              <video id="active-media-player" src="${window.escapeHtml(slide.media_url)}" controls style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);"></video>
             `;
           } else if (mediaType === 'audio') {
             mediaContainer.innerHTML = `
@@ -643,6 +644,12 @@ class RallyeApp {
           }
         }
       }
+    }
+
+    const video = mediaContainer?.querySelector('video');
+    if (video && !video.dataset.fullscreenBound) {
+      video.dataset.fullscreenBound = 'true';
+      video.addEventListener('play', () => this.openVideoFullscreen(video));
     }
 
     const stationImage = mediaContainer?.querySelector('img');
@@ -710,17 +717,56 @@ class RallyeApp {
     }
   }
 
-  syncMediaPlayback(status) {
-    const player = document.getElementById('active-media-player');
-    if (!player) return;
+  showMediaAction(player, label) {
+    if (!player.isConnected) return;
+    let button = player.parentElement.querySelector('[data-media-action]');
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'btn-primary';
+      button.dataset.mediaAction = 'true';
+      player.after(button);
+    }
+    button.textContent = label;
+    button.onclick = () => {
+      this.openVideoFullscreen(player);
+      player.play().catch(() => { button.textContent = '▶ Video starten'; });
+    };
+  }
 
+  async openVideoFullscreen(player) {
+    if (player.tagName !== 'VIDEO' || !player.isConnected || player.fullscreenPending ||
+        document.fullscreenElement === player || player.webkitDisplayingFullscreen) return;
+    player.fullscreenPending = true;
+    try {
+      if (player.webkitEnterFullscreen) player.webkitEnterFullscreen();
+      else if (player.requestFullscreen) await player.requestFullscreen();
+      else throw new Error('Fullscreen unavailable');
+      player.parentElement?.querySelector('[data-media-action]')?.remove();
+    } catch {
+      this.showMediaAction(player, '⛶ Vollbild öffnen');
+    } finally {
+      player.fullscreenPending = false;
+    }
+  }
+
+  syncMediaPlayback(status, command = false) {
+    const player = document.getElementById('active-media-player');
+    if (!player || !['playing', 'paused', 'stopped'].includes(status)) return;
+    // A heartbeat describes server state, not a fresh playback command.
+    // Track each media element separately so a new slide still gets its initial state.
+    if (!command && player.dataset.serverMediaStatus === status) return;
+    player.dataset.serverMediaStatus = status;
+    player.parentElement.querySelector('[data-media-action]')?.remove();
     if (status === 'playing') {
-      player.play().catch(e => console.warn('Autoplay prevented by browser', e));
-    } else if (status === 'paused') {
+      player.play().catch(() => {
+        if (player.dataset.serverMediaStatus === 'playing' && player.tagName === 'VIDEO') {
+          this.showMediaAction(player, '▶ Video starten');
+        }
+      });
+    } else {
       player.pause();
-    } else if (status === 'stopped') {
-      player.pause();
-      player.currentTime = 0;
+      if (status === 'stopped') player.currentTime = 0;
     }
   }
 

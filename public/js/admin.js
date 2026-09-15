@@ -310,7 +310,11 @@ class AdminController {
     const mediaPauseBtn = document.getElementById('admin-media-pause-btn');
     const mediaStopBtn = document.getElementById('admin-media-stop-btn');
 
-    if (mediaPlayBtn) mediaPlayBtn.addEventListener('click', () => this.sendMediaControl('play'));
+    if (mediaPlayBtn) mediaPlayBtn.addEventListener('click', () => {
+      const video = document.querySelector('#active-media-player');
+      if (video?.tagName === 'VIDEO') window.app?.openVideoFullscreen(video);
+      this.sendMediaControl('play');
+    });
     if (mediaPauseBtn) mediaPauseBtn.addEventListener('click', () => this.sendMediaControl('pause'));
     if (mediaStopBtn) mediaStopBtn.addEventListener('click', () => this.sendMediaControl('stop'));
 
