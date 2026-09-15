@@ -1922,3 +1922,6 @@ body { min-height: 100dvh; }
 #app > .app-footer { position: static; flex-shrink: 0; padding: 6px 14px calc(6px + env(safe-area-inset-bottom)); }
 .tour-welcome { margin-bottom: 12px; }
 #app input, #app select, #app textarea { font-size: max(16px, 1em); }
+
+/* Explicit input size wins over the generic #app input rule on mobile Safari. */
+#app #est-number-input { font-size: 20px; line-height: 1.4; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

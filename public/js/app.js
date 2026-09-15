@@ -498,6 +498,7 @@ class RallyeApp {
       return;
     }
     if (document.querySelector('dialog[open], .modal-overlay:not(.hidden), #admin-modal:not(.hidden)')) return;
+    window.prepareLiveInput?.();
     document.getElementById('est-number-input')?.focus({ preventScroll: true });
   }
 
