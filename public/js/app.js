@@ -468,6 +468,7 @@ class RallyeApp {
 
     this.renderSlide(state.current_slide, state.current_slide_index, state.total_slides);
     this.renderQuizPhase(state);
+    this.scrollToNewAnswers(state);
     this.syncTimer(state.timer);
     this.syncMediaPlayback(state.media_status);
 
@@ -482,6 +483,35 @@ class RallyeApp {
     if (this.odometer) {
       this.odometer.set(currentScore, true);
     }
+  }
+
+  scrollToNewAnswers(state) {
+    const slide = state.current_slide;
+    const targetId = slide?.type === 'multiple_choice' && [2, 3].includes(state.phase)
+      ? 'options-grid' : slide?.type === 'estimation' && state.phase === 3 ? 'estimation-container' : null;
+    const key = targetId ? `${slide.id}:${targetId}` : null;
+    if (this.visibleAnswersKey === key) return;
+    this.visibleAnswersKey = key;
+    if (!key) return;
+    requestAnimationFrame(() => {
+      if (this.visibleAnswersKey !== key) return;
+      // Leave admin dialogs and player input focus untouched.
+      if (document.querySelector('dialog[open], .modal-overlay:not(.hidden), #admin-modal:not(.hidden)')) return;
+      const main = document.querySelector('#app > main');
+      const target = document.getElementById(targetId);
+      if (!main || !target || !target.getClientRects().length) return;
+      const viewport = main.getBoundingClientRect();
+      const answers = target.getBoundingClientRect();
+      const inset = 12;
+      let delta = 0;
+      if (answers.height > main.clientHeight - inset * 2 || answers.top < viewport.top + inset) {
+        delta = answers.top - viewport.top - inset;
+      } else if (answers.bottom > viewport.bottom - inset) {
+        delta = answers.bottom - viewport.bottom + inset;
+      }
+      if (delta) main.scrollTo({ top: main.scrollTop + delta,
+        behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+    });
   }
 
   showAnnouncement(msg, playSound = true) {
