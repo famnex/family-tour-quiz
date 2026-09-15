@@ -626,7 +626,38 @@ class AdminController {
     }
   }
 
+  renderAdminLiveMap(slide) {
+    const box = document.getElementById('admin-live-map-box');
+    const link = document.getElementById('admin-live-nav-btn');
+    if (!box || !link) return;
+    const visible = slide?.type === 'transit' && Number.isFinite(slide.latitude) && Number.isFinite(slide.longitude);
+    box.classList.toggle('hidden', !visible);
+    if (!visible) {
+      link.removeAttribute('href');
+      return;
+    }
+    const coords = [slide.latitude, slide.longitude];
+    link.href = `https://www.google.com/maps/dir/?api=1&destination=${coords.join(',')}`;
+    if (typeof L === 'undefined') return;
+    if (!this.liveMap) {
+      this.liveMap = L.map('admin-live-map', { zoomControl: true }).setView(coords, 16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '© OpenStreetMap'
+      }).addTo(this.liveMap);
+      this.liveMapMarker = L.marker(coords).addTo(this.liveMap);
+      this.liveMapResizeObserver = new ResizeObserver(() => this.liveMap.invalidateSize({ pan: false }));
+      this.liveMapResizeObserver.observe(document.getElementById('admin-live-map'));
+    }
+    const key = `${slide.id}:${coords.join(',')}`;
+    if (key !== this.liveMapTarget) {
+      this.liveMapMarker.setLatLng(coords);
+      this.liveMap.setView(coords, 16);
+      this.liveMapTarget = key;
+    }
+  }
+
   renderAdminLivePreview(state, currentSlide, isQuizSlide) {
+    this.renderAdminLiveMap(currentSlide);
     const previewBox = document.getElementById('admin-live-preview-box');
     if (!previewBox) return;
 
