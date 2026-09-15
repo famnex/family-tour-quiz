@@ -56,15 +56,6 @@ class RallyeApp {
   }
 
   bindEvents() {
-    // Sound Toggle Button
-    const soundToggleBtn = document.getElementById('sound-toggle-btn');
-    if (soundToggleBtn) {
-      soundToggleBtn.addEventListener('click', () => {
-        const isMuted = window.soundFx.toggleMute();
-        soundToggleBtn.textContent = isMuted ? '🔇' : '🔊';
-      });
-    }
-
     // Login Form Submit
     const authForm = document.getElementById('auth-form');
     if (authForm) {
@@ -404,7 +395,7 @@ class RallyeApp {
         break;
 
       case 'announcement':
-        this.showAnnouncement(data.message);
+        this.showAnnouncement(data.message, true, data.timestamp);
         break;
 
       case 'leaderboard_update':
@@ -461,7 +452,7 @@ class RallyeApp {
     }
 
     if (state.active_announcement) {
-      this.showAnnouncement(state.active_announcement, false);
+      this.showAnnouncement(state.active_announcement, true, state.announcement_time);
     } else {
       this.hideAnnouncement();
     }
@@ -531,7 +522,7 @@ class RallyeApp {
     });
   }
 
-  showAnnouncement(msg, playSound = true) {
+  showAnnouncement(msg, playSound = true, timestamp = 0) {
     const banner = document.getElementById('announcement-banner');
     const text = document.getElementById('announcement-text');
     if (!banner || !text || !msg) return;
@@ -539,7 +530,10 @@ class RallyeApp {
     text.textContent = msg;
     banner.classList.remove('hidden');
 
-    if (playSound && window.soundFx) {
+    const stamp = `${timestamp}:${msg}`;
+    const fresh = this.lastAnnouncementStamp !== stamp;
+    this.lastAnnouncementStamp = stamp;
+    if (playSound && fresh && !document.hidden && window.soundFx) {
       window.soundFx.playAnnouncementChime();
     }
   }
@@ -566,6 +560,7 @@ class RallyeApp {
     }
 
     const isNewSlide = this.currentSlideId !== slide.id;
+    if (isNewSlide) { this.ceremonyGeneration = (this.ceremonyGeneration || 0) + 1; this.hasPerformedGrandCeremony = false; this.isCeremonyRunning = false; }
     this.currentSlideId = slide.id;
 
     if (slide.type === 'transit') {
@@ -742,13 +737,14 @@ class RallyeApp {
     const estimationContainer = document.getElementById('estimation-container');
     const resultBanner = document.getElementById('result-banner');
 
-    if (state.phase === 5) {
+    if (state.phase === 5 || slide?.type === 'summary') {
       stageCard.classList.add('hidden');
       leaderboardSection.classList.remove('hidden');
       this.renderLeaderboard(state.leaderboard);
       return;
     }
 
+    this.ceremonyGeneration = (this.ceremonyGeneration || 0) + 1;
     this.hasPerformedGrandCeremony = false;
     this.isCeremonyRunning = false;
     document.getElementById('winner-trophy-modal')?.classList.add('hidden');
@@ -1036,10 +1032,10 @@ class RallyeApp {
     if (!list || !leaderboard) return;
 
     const isLastSlide = this.state && this.state.current_slide_index === (this.state.total_slides - 1);
-    const isFinalCeremony = this.state?.phase === 5 && isLastSlide;
+    const isFinalCeremony = (this.state?.phase === 5 && isLastSlide) || this.state?.current_slide?.type === 'summary';
 
     if (isFinalCeremony) {
-      if (titleEl) titleEl.innerHTML = '<span>🏆</span> Große Endauswertung & Siegerehrung';
+      if (titleEl) titleEl.textContent = '🏆 ' + (this.state?.current_slide?.type === 'summary' ? this.state.current_slide.title : 'Große Endauswertung & Siegerehrung');
 
       // If animation is currently running, do NOT restart it!
       if (this.isCeremonyRunning) {
@@ -1096,6 +1092,8 @@ class RallyeApp {
     const list = document.getElementById('ranking-list');
     if (!list || !leaderboard || leaderboard.length === 0) return;
 
+    const generation = this.ceremonyGeneration;
+    const stillCurrent = () => this.ceremonyGeneration === generation;
     this.isCeremonyRunning = true;
     this.hasPerformedGrandCeremony = true;
 
@@ -1129,6 +1127,7 @@ class RallyeApp {
     // Sequential Reveal: Bottom to Top (from last place up to 1st place!)
     const total = leaderboard.length;
     for (let i = total - 1; i >= 0; i--) {
+      if (!stillCurrent()) return;
       const rank = i + 1;
       const row = rows[i];
 
@@ -1136,6 +1135,7 @@ class RallyeApp {
         // Dramatic Drumroll before Sieger
         if (window.soundFx) window.soundFx.playDrumroll(1400);
         await new Promise(r => setTimeout(r, 1400));
+        if (!stillCurrent()) return;
 
         row.classList.remove('rank-reveal-hidden');
         row.classList.add('rank-revealed', 'sieger-highlight');
@@ -1144,6 +1144,7 @@ class RallyeApp {
         if (typeof window.confetti !== 'undefined') window.confetti.burst(150);
 
         await new Promise(r => setTimeout(r, 1000));
+        if (!stillCurrent()) return;
 
         // Check if current user reached Top 3 (1, 2, or 3) and show personal Trophy Modal
         const myRankIndex = leaderboard.findIndex(p => p.id === this.user?.id);
@@ -1159,7 +1160,7 @@ class RallyeApp {
       }
     }
 
-    this.isCeremonyRunning = false;
+    if (stillCurrent()) this.isCeremonyRunning = false;
   }
 
   showWinnerTrophyModal(player, rank) {

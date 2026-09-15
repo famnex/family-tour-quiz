@@ -73,3 +73,9 @@ Chromium: Abbrechen, Verwerfen und Speichern beim Wechsel, Entwurfswiederherstel
 ### Passwort-Wiederherstellung
 
 Dauerhafte Passwortspeicherung als gesalzener scrypt-Hash, Wiederherstellung über einen privaten Einmalcode und Widerruf aller Admin-Sitzungen. API-Tests prüfen ungültige und verbrauchte Codes, Passwortvalidierung, Codewechsel, Anmeldung mit dem neuen Passwort und fehlende öffentliche Auslieferung des Codes.
+
+### Eilmeldungen, Push und weitere Studio-Funktionen
+
+Mülleimer-Buttons ersetzen „Löschen“ bei Eilmeldungen. Sichtbare Audiofreigabe mit Testton und gespeicherter Stummschaltung; neue Meldungen werden anhand Zeitstempel/Text gegen doppelte Tonauslösung abgesichert. Echte Web-Push-Abonnements werden erst nach Zustimmung angemeldet, in SQLite gespeichert und bei Teilnehmerlöschung entfernt. VAPID-Schlüssel bleiben in der Datenbank. Service Worker zeigt Systemnachrichten an und öffnet die korrekte Unterpfad-App. Reale Apple-/Google-Zustellung und tatsächliche Gerätetöne müssen nach Deployment auf echten Geräten geprüft werden; lokale Tests verwenden simulierte Push-Dienste und Browserberechtigungen.
+
+Studio: Punkte/Timer nur für Quizfragen, Medienpfade unter `/uploads/` speicherbar, frei platzierbare Endauswertungsfolien. Browserprüfung umfasst Speichern des Upload-Pfads, Folientypwechsel, Sortieren/Anzeigen/Verlassen einer Endauswertung sowie Audiofreigabe, Ton-Deduplizierung und Push-An-/Abmeldung. Push-Modultests prüfen Schlüsselbeständigkeit, Endpunktvalidierung, Zustellfehler, abgelaufene Abonnements und Service-Worker-Ereignisse.

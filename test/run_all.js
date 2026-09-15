@@ -13,4 +13,7 @@ if (res2.status !== 0) {
   process.exit(res2.status);
 }
 
-console.log('\n🌟 Alle Unit- & E2E-Tests erfolgreich abgeschlossen!');
+const pushResult = spawnSync(process.execPath, [path.join(__dirname, 'push_test.js')], { stdio: 'inherit' });
+if (pushResult.status !== 0) process.exit(pushResult.status || 1);
+
+console.log('\n🌟 Alle Unit-, E2E- und Push-Tests erfolgreich abgeschlossen!');

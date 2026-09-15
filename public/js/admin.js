@@ -969,13 +969,13 @@ class AdminController {
       card.innerHTML = `
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
           <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="badge badge-${slide.type}">${slide.type}</span>
+            <span class="badge badge-${slide.type}">${slide.type === 'summary' ? 'Endauswertung' : slide.type}</span>
             <strong style="color: white; font-size: 0.95rem;">${idx + 1}. ${window.escapeHtml(slide.title)}</strong>
           </div>
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 4px;">
           <small style="color: var(--text-muted); font-size: 0.8rem;">
-            ${window.escapeHtml(slide.location_name || 'Kein Standort')} • ${slide.max_points} Pkt • ⏱️ ${slide.countdown_seconds}s
+            ${window.escapeHtml(slide.location_name || 'Kein Standort')}${['multiple_choice','estimation'].includes(slide.type) ? ` • ${slide.max_points} Pkt • ⏱️ ${slide.countdown_seconds}s` : ''}
           </small>
           <div style="display: flex; gap: 4px;" onclick="event.stopPropagation();">
             <button class="icon-btn" style="padding: 4px 8px; font-size: 0.8rem;" onclick="window.admin.moveSlide(${idx}, -1)" title="Nach oben">▲</button>
@@ -1098,11 +1098,13 @@ class AdminController {
 
   async sendAnnouncement(message) {
     try {
-      await this.request(window.apiUrl('/api/admin/announcement'), {
+      const response = await this.request(window.apiUrl('/api/admin/announcement'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message })
       });
+      const data = await response.json();
+      window.showToast(data.push?.failed ? `Eilmeldung angezeigt. Push: ${data.push.accepted} angenommen, ${data.push.failed} fehlgeschlagen.` : `Eilmeldung gesendet. Push: ${data.push?.accepted || 0} Geräte angenommen.`);
     } catch (e) {
       console.error(e);
     }
@@ -1242,6 +1244,7 @@ class AdminController {
       badgeEl.className = 'badge badge-info';
       document.getElementById('edit-media-preview-container').classList.add('hidden');
       document.getElementById('edit-audio-url-wrapper').classList.add('hidden');
+      document.getElementById('edit-slide-type').value = 'info';
       this.toggleSlideTypeFields('info');
       this.guard.markClean(this.guard.baseline !== null && this.guard.restored);
       return true;
@@ -1251,7 +1254,7 @@ class AdminController {
     if (!slide) return;
 
     titleEl.textContent = `Folie bearbeiten: ${slide.title}`;
-    badgeEl.textContent = slide.type.toUpperCase();
+    badgeEl.textContent = slide.type === 'summary' ? 'ENDAUSWERTUNG' : slide.type.toUpperCase();
     badgeEl.className = `badge badge-${slide.type}`;
 
     document.getElementById('edit-slide-id').value = slide.id;
@@ -1332,13 +1335,17 @@ class AdminController {
   }
 
   toggleSlideTypeFields(type) {
+    const scoring = document.getElementById('edit-scoring-section');
+    const isQuiz = ['multiple_choice', 'estimation'].includes(type);
+    scoring.classList.toggle('hidden', !isQuiz);
+    scoring.querySelectorAll('input').forEach(input => input.disabled = !isQuiz);
     const mcSection = document.getElementById('edit-mc-section');
     const estSection = document.getElementById('edit-estimation-section');
     const questSection = document.getElementById('edit-question-section');
     const badgeEl = document.getElementById('studio-editor-type-badge');
 
     if (badgeEl) {
-      badgeEl.textContent = type.toUpperCase();
+      badgeEl.textContent = type === 'summary' ? 'ENDAUSWERTUNG' : type.toUpperCase();
       badgeEl.className = `badge badge-${type}`;
     }
 

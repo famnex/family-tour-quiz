@@ -1925,3 +1925,7 @@ body { min-height: 100dvh; }
 
 /* Explicit input size wins over the generic #app input rule on mobile Safari. */
 #app #est-number-input { font-size: 20px; line-height: 1.4; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+.header-inner { flex-wrap: wrap; gap: 8px; }
+.header-controls { flex-wrap: wrap; gap: 6px; }
+.badge-summary { background: #70561c; color: #ffe9a3; }

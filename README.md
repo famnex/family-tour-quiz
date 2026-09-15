@@ -152,3 +152,15 @@ Der Code gilt einmal und wird anschließend in derselben Datei ersetzt. Alle bis
 Die Liveansicht verzichtet auf Begrüßungstexte und das ausgeschriebene Verbindungssignal. Der Statuspunkt bleibt erhalten. Nur der Inhaltsbereich scrollt; die Fußleiste nimmt eigenen Platz ein. Pinch- und Doppeltipp-Zoom werden in der Livefläche über Touch-Regeln und Gestenbehandlung unterbunden, soweit der Browser dies zulässt.
 
 Schätzfragen geben gültige Zahlen während des Tippens automatisch ab; der letzte vor Timerschluss erfolgreich beim Server gespeicherte Wert zählt. „Tipp abgeben“ bleibt zum Bestätigen und Schließen der Tastatur erhalten. Der Timerstart fokussiert das Zahlenfeld, soweit kein Dialog geöffnet ist. Ob dabei die Bildschirmtastatur erscheint und ein bestehender Zoom zurückgesetzt wird, hängt insbesondere unter iOS vom Browser ab. Speicherfehler werden am Feld angezeigt.
+
+### Ton und echte Push-Eilmeldungen
+
+Die Tonschaltfläche zeigt „Ton aktivieren“, solange der Browser Audio noch nicht freigegeben hat. Antippen aktiviert den Ton und spielt einen Testklang. Auch andere bewusste Berührungen können Audio freigeben; „Ton aus“ bleibt als Gerätewunsch gespeichert. Neue Eilmeldungen klingen einmal in der sichtbaren App, auch bei Polling statt WebSocket. Lautstärke, Lautlosmodus und Fokus werden vom Gerät bestimmt.
+
+Über die Glocke können angemeldete Mitspieler Push-Nachrichten ausdrücklich erlauben oder abschalten. Auf iPhone/iPad ab iOS 16.4 zuerst zum Home-Bildschirm hinzufügen und die App von dort starten. HTTPS ist erforderlich. Push-Nachrichten erscheinen auch bei geschlossener PWA; ihr Systemton ist nicht frei durch die Webseite festlegbar. Eine Serverannahme ist keine Garantie für die Anzeige am Gerät. Nach dem Löschen der Teilnehmer beim Rallye-Reset Push über die Glocke erneut bestätigen.
+
+Beim Update `npm ci` ausführen und den Server neu starten. Die Bibliothek `web-push` ist neu. VAPID-Schlüssel werden einmal erzeugt und in der Datenbank aufbewahrt; die Datenbank bei Updates erhalten. Optional `VAPID_SUBJECT` als eigene HTTPS-Kontaktadresse oder `mailto:`-Adresse setzen. Der Server benötigt ausgehendes HTTPS zu Apple-, Google-, Mozilla- bzw. Windows-Push-Diensten. Abgelaufene Abonnements werden bei 404/410 entfernt. Nicht zustellbare Meldungen werden nicht unbegrenzt wiederholt; ihre Push-Gültigkeit beträgt fünf Minuten.
+
+### Weitere Studio-Folien
+
+„Endauswertung / Siegerehrung“ lässt sich wie jede andere Folie anlegen und beliebig verschieben. Beim Aufrufen zeigt sie die bisherige Gesamtwertung mit Siegerehrung; danach kann die Tour weitergehen. Punkte und Timer sind nur bei Multiple Choice und Schätzfragen sichtbar. Medienfelder akzeptieren HTTPS-Adressen und eigene Upload-Pfade wie `/uploads/bild.jpeg`.

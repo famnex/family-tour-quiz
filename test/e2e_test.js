@@ -218,6 +218,8 @@ async function runE2E() {
     require('fs').unlinkSync(path.join(__dirname, '..', 'public', uploadRes.data.url));
 
     console.log('9. Regression: protected admin, private answers, session identity, timer stop and validation...');
+    assert.strictEqual((await request(`${baseUrl}/api/push/subscribe`, { method: 'POST' }, { subscription: {} })).status, 401);
+    assert.strictEqual((await request(`${baseUrl}/api/push/subscribe`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }, { subscription: { endpoint: 'https://127.0.0.1/private' } })).status, 400);
     const savedCookie = adminCookie;
     adminCookie = '';
     assert.strictEqual((await request(`${baseUrl}/api/admin/reset-rallye`, { method: 'POST' })).status, 401);

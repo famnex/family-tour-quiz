@@ -6,6 +6,7 @@ class AudioSynth {
   constructor() {
     this.ctx = null;
     this.isMuted = false;
+    try { this.isMuted = localStorage.getItem('rallye_muted') === 'true'; } catch {}
     this.initialized = false;
   }
 
@@ -24,8 +25,8 @@ class AudioSynth {
 
   ensureContext() {
     this.init();
-    if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+    if (this.ctx && this.ctx.state !== 'running' && this.ctx.state !== 'closed') {
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -200,6 +201,7 @@ class AudioSynth {
   }
 
   playAnnouncementChime() {
+    if (this.ctx?.state !== 'running') return;
     if (this.isMuted) return;
     this.ensureContext();
     if (!this.ctx) return;
@@ -360,3 +362,37 @@ class AudioSynth {
 }
 
 window.soundFx = new AudioSynth();
+
+// Unlock/resume audio inside a real tap, including after returning from the lock screen.
+(() => {
+  const sound = window.soundFx;
+  const button = document.getElementById('sound-toggle-btn');
+  const update = () => {
+    const ready = sound.ctx?.state === 'running';
+    button.textContent = sound.isMuted ? '🔇 Ton aus' : ready ? '🔊' : '🔈 Ton aktivieren';
+    button.title = sound.isMuted || !ready ? 'Ton aktivieren und testen' : 'Ton ausschalten';
+    button.setAttribute('aria-label', button.title);
+    button.setAttribute('aria-pressed', String(!sound.isMuted && ready));
+  };
+  const unlock = async () => {
+    sound.init();
+    if (!sound.ctx) return false;
+    sound.ctx.onstatechange = update;
+    try { await sound.ctx.resume(); } catch {}
+    update();
+    return sound.ctx.state === 'running';
+  };
+  button.addEventListener('click', async () => {
+    if (sound.isMuted || sound.ctx?.state !== 'running') {
+      sound.isMuted = false;
+      if (await unlock()) sound.playAnnouncementChime();
+    } else sound.isMuted = true;
+    try { localStorage.setItem('rallye_muted', String(sound.isMuted)); } catch {}
+    update();
+  });
+  document.addEventListener('pointerdown', e => {
+    if (!button.contains(e.target) && !sound.isMuted && sound.ctx?.state !== 'running') void unlock();
+  }, {passive:true});
+  document.addEventListener('visibilitychange', update);
+  update();
+})();

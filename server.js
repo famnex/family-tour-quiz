@@ -35,6 +35,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS sessions (
   admin INTEGER NOT NULL DEFAULT 0, expires_at INTEGER NOT NULL
 )`);
 const adminCredentials = require('./src/adminCredentials')(db);
+const pushNotifications = require('./src/pushNotifications')(db);
 function session(token, admin = false) {
   if (typeof token !== 'string') return null;
   return db.prepare('SELECT * FROM sessions WHERE token = ? AND expires_at > ? AND admin = ?')
@@ -120,8 +121,8 @@ function broadcastState() {
   }
 }
 
-function broadcastAnnouncement(message) {
-  broadcast({ type: 'announcement', message, timestamp: Date.now() });
+function broadcastAnnouncement(message, timestamp = Date.now()) {
+  broadcast({ type: 'announcement', message, timestamp });
 }
 
 function broadcastLeaderboard() {
@@ -331,6 +332,20 @@ app.post('/api/auth/logout', (req, res) => {
 });
 let failedAdminAttempts = 0;
 let adminRetryAt = 0;
+app.get('/api/push/key', (req, res) => res.json({publicKey: pushNotifications.publicKey}));
+app.post('/api/push/subscribe', (req, res) => {
+  const id = playerId(req);
+  if (!id) return res.status(401).json({error:'Bitte zuerst als Mitspieler anmelden.'});
+  if (!pushNotifications.save(id, req.body.subscription)) return res.status(400).json({error:'Push-Anmeldung ungültig oder Gerätelimit erreicht.'});
+  res.json({success:true});
+});
+app.post('/api/push/unsubscribe', (req, res) => {
+  const id = playerId(req);
+  if (!id) return res.status(401).json({error:'Bitte zuerst anmelden.'});
+  if (typeof req.body.endpoint !== 'string') return res.status(400).json({error:'Endpunkt fehlt.'});
+  pushNotifications.remove(id, req.body.endpoint);
+  res.json({success:true});
+});
 app.post('/api/admin/auth', (req, res) => {
   if (Date.now() < adminRetryAt) return res.status(429).json({ error: 'Zu viele Versuche. Bitte in einer Minute erneut versuchen.' });
   if (!adminCredentials.verify(req.body.password)) {
@@ -379,7 +394,7 @@ app.post('/api/admin/invite-qr', async (req, res) => {
 });
 
 function validateSlide(s) {
-  if (!s || typeof s !== 'object' || !['info','transit','action','multiple_choice','estimation'].includes(s.type) || typeof s.title !== 'string' || !s.title.trim() || s.title.length > 200) return 'Titel und gültigen Folientyp angeben.';
+  if (!s || typeof s !== 'object' || !['info','transit','action','multiple_choice','estimation','summary'].includes(s.type) || typeof s.title !== 'string' || !s.title.trim() || s.title.length > 200) return 'Titel und gültigen Folientyp angeben.';
   if (s.id !== undefined && (typeof s.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(s.id))) return 'Ungültige Folien-ID.';
   for (const key of ['description','location_name','meeting_time','question','admin_notes'])
     if (s[key] != null && (typeof s[key] !== 'string' || s[key].length > 20000)) return 'Ungültiges Textfeld: ' + key;
@@ -691,9 +706,9 @@ app.post('/api/admin/timer/stop', (req, res) => {
 });
 
 // Push Announcement (Eilmeldung)
-app.post('/api/admin/announcement', (req, res) => {
+app.post('/api/admin/announcement', async (req, res) => {
   const { message } = req.body;
-  if (!message || message.trim() === '') {
+  if (typeof message !== 'string' || !message.trim() || message.length > 500) {
     return res.status(400).json({ error: 'Nachricht erforderlich' });
   }
 
@@ -710,10 +725,11 @@ app.post('/api/admin/announcement', (req, res) => {
     WHERE id = 1
   `).run(cleanMsg, now);
 
-  broadcastAnnouncement(cleanMsg);
+  broadcastAnnouncement(cleanMsg, now);
   broadcastState();
 
-  res.json({ success: true, message: cleanMsg });
+  const push = await pushNotifications.send(cleanMsg, id);
+  res.json({ success: true, message: cleanMsg, push });
 });
 
 // Clear Announcement

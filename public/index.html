@@ -7,8 +7,8 @@
   <meta name="description" content="Familienausflug-Rallye Companion App – Live-synchronisierte Stadtrallye und Quiz für die ganze Familie">
   <title>Familienausflug-Rallye</title>
   
-  <link rel="manifest" href="manifest.json?v=1.10.1">
-  <link rel="stylesheet" href="css/style.css?v=1.10.1">
+  <link rel="manifest" href="manifest.json?v=1.11.0">
+  <link rel="stylesheet" href="css/style.css?v=1.11.0">
   <!-- Leaflet Map CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script>
@@ -39,7 +39,8 @@
         </div>
 
         <div class="header-controls">
-          <button id="sound-toggle-btn" class="icon-btn" title="Ton ein/aus">🔊</button>
+          <button id="sound-toggle-btn" class="icon-btn" title="Ton aktivieren">🔈 Ton aktivieren</button>
+          <button id="push-settings-btn" class="icon-btn" title="Push-Nachrichten" aria-label="Push-Nachrichten einstellen">🔔</button>
           <button id="admin-toggle-btn" class="icon-btn" title="Admin-Bereich (Passwort)">👑 Admin</button>
         </div>
       </div>
@@ -415,13 +416,13 @@
                 <span style="font-weight: 900; flex-shrink: 0;">📢 Aktiv:</span>
                 <span id="admin-active-announcement-text" style="color: white; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></span>
               </div>
-              <button type="button" id="admin-dismiss-active-announcement-btn" class="btn-danger" style="padding: 4px 8px; font-size: 0.75rem; flex-shrink: 0;" title="Meldung auf allen Geräten entfernen">✕ Löschen</button>
+              <button type="button" id="admin-dismiss-active-announcement-btn" aria-label="Eilmeldung entfernen" class="btn-danger" style="padding: 4px 8px; font-size: 0.75rem; flex-shrink: 0;" title="Meldung auf allen Geräten entfernen">🗑️</button>
             </div>
 
             <div class="announcement-form-row" style="display: flex; gap: 8px;">
               <input type="text" id="admin-announcement-input" class="input-field" placeholder="z. B. Eispause in 5 Minuten!">
               <button id="admin-send-announcement-btn" class="submit-btn" style="padding: 10px 14px; white-space: nowrap;">📢 Senden</button>
-              <button id="admin-clear-announcement-btn" class="btn-secondary" style="padding: 10px 12px; white-space: nowrap;">Löschen</button>
+              <button id="admin-clear-announcement-btn" title="Eilmeldung entfernen" aria-label="Eilmeldung entfernen" class="btn-secondary" style="padding: 10px 12px; white-space: nowrap;">🗑️</button>
             </div>
           </div>
 
@@ -488,6 +489,7 @@
               <div>
                 <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Folientyp</label>
                 <select id="edit-slide-type" class="input-field" style="height: 48px;" required>
+                  <option value="summary">🏆 Endauswertung / Siegerehrung</option>
                   <option value="info">ℹ️ Information / Station (Keine Punkte)</option>
                   <option value="transit">🚶 Unterwegs / Wegstrecke (Transfer)</option>
                   <option value="multiple_choice">❓ Multiple-Choice Quiz (4 Optionen)</option>
@@ -551,7 +553,7 @@
             <div>
               <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 6px;">Bild- / Medien-Datei hochladen oder URL</label>
               <div style="display: flex; gap: 8px;">
-                <input type="url" id="edit-slide-media-url" class="input-field" placeholder="https://... oder Datei hochladen">
+                <input type="text" inputmode="url" id="edit-slide-media-url" class="input-field" placeholder="https://... oder Datei hochladen">
                 <input type="file" id="edit-slide-media-file" accept="image/*,video/*,audio/*" class="hidden">
                 <button type="button" id="edit-upload-media-btn" class="btn-secondary" style="white-space: nowrap;">📁 Datei wählen</button>
               </div>
@@ -564,7 +566,7 @@
             <div id="edit-audio-url-wrapper" class="hidden">
               <label style="font-size: 0.85rem; font-weight: 800; color: #38bdf8; display: block; margin-bottom: 6px;">🎵 Zusätzliche Sound- / Audio-Guide-Datei</label>
               <div style="display: flex; gap: 8px;">
-                <input type="url" id="edit-slide-audio-url" class="input-field" placeholder="Sound-URL oder Datei hochladen">
+                <input type="text" inputmode="url" id="edit-slide-audio-url" class="input-field" placeholder="Sound-URL oder Datei hochladen">
                 <input type="file" id="edit-slide-audio-file" accept="audio/*" class="hidden">
                 <button type="button" id="edit-upload-audio-btn" class="btn-secondary" style="white-space: nowrap;">🎵 Audio wählen</button>
               </div>
@@ -617,7 +619,7 @@
             </div>
 
             <!-- Scoring & Timer Settings -->
-            <div class="form-grid-2">
+            <div id="edit-scoring-section" class="form-grid-2">
               <div>
                 <label style="font-size: 0.85rem; font-weight: 800; color: var(--text-muted); display: block; margin-bottom: 4px;">Max. Punkte für diese Aufgabe</label>
                 <input type="number" id="edit-slide-max-points" class="input-field" value="100" min="0" max="1000">
@@ -729,18 +731,30 @@
     </div>
   </dialog>
 
+  <dialog id="push-dialog" class="rallye-dialog" aria-labelledby="push-title">
+    <h2 id="push-title">Eilmeldungen auf deinem Gerät</h2>
+    <p>Erhalte neue Eilmeldungen auch bei geschlossener App. Auf iPhone und iPad: erst zum Home-Bildschirm hinzufügen und von dort öffnen.</p>
+    <p id="push-status" role="status">Status wird geprüft …</p>
+    <p>Ton und Anzeige von Systemnachrichten richten sich nach Lautstärke, Lautlosmodus und Fokus deines Geräts.</p>
+    <div class="dialog-actions">
+      <button id="push-enable" class="submit-btn" type="button">Push erlauben</button>
+      <button id="push-disable" class="btn-secondary" type="button">Push ausschalten</button>
+      <button id="push-close" class="btn-secondary" type="button">Schließen</button>
+    </div>
+  </dialog>
   <!-- Scripts -->
   <!-- Leaflet Map JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="js/ui.js?v=1.10.1"></script>
-  <script src="js/audioSynth.js?v=1.10.1"></script>
-  <script src="js/confetti.js?v=1.10.1"></script>
-  <script src="js/odometer.js?v=1.10.1"></script>
-  <script src="js/editorGuard.js?v=1.10.1"></script>
-  <script src="js/admin.js?v=1.10.1"></script>
-  <script src="js/app.js?v=1.10.1"></script>
-<script src="js/invitations.js?v=1.10.1"></script>
-<script src="js/adminRecovery.js?v=1.10.1"></script>
-<script src="js/liveView.js?v=1.10.1"></script>
+  <script src="js/ui.js?v=1.11.0"></script>
+  <script src="js/audioSynth.js?v=1.11.0"></script>
+  <script src="js/confetti.js?v=1.11.0"></script>
+  <script src="js/odometer.js?v=1.11.0"></script>
+  <script src="js/editorGuard.js?v=1.11.0"></script>
+  <script src="js/admin.js?v=1.11.0"></script>
+  <script src="js/app.js?v=1.11.0"></script>
+<script src="js/invitations.js?v=1.11.0"></script>
+<script src="js/adminRecovery.js?v=1.11.0"></script>
+<script src="js/liveView.js?v=1.11.0"></script>
+<script src="js/pushClient.js?v=1.11.0"></script>
 </body>
 </html>
