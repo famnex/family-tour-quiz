@@ -469,6 +469,7 @@ class RallyeApp {
     this.renderSlide(state.current_slide, state.current_slide_index, state.total_slides);
     this.renderQuizPhase(state);
     this.scrollToNewAnswers(state);
+    this.focusEstimationOnTimerStart(state);
     this.syncTimer(state.timer);
     this.syncMediaPlayback(state.media_status);
 
@@ -483,6 +484,21 @@ class RallyeApp {
     if (this.odometer) {
       this.odometer.set(currentScore, true);
     }
+  }
+
+  focusEstimationOnTimerStart(state) {
+    const active = state.current_slide?.type === 'estimation' && state.phase === 3 && state.timer.status === 'running' && state.timer.remaining > 0;
+    const key = active ? `${state.current_slide.id}:${state.timer.start}` : null;
+    if (this.estimationTimerKey === key) return;
+    this.estimationTimerKey = key;
+    if (!key) {
+      this.queuedEstimation = null;
+      if (document.activeElement?.id === 'est-number-input') document.activeElement.blur();
+      window.restoreLiveScale?.();
+      return;
+    }
+    if (document.querySelector('dialog[open], .modal-overlay:not(.hidden), #admin-modal:not(.hidden)')) return;
+    document.getElementById('est-number-input')?.focus({ preventScroll: true });
   }
 
   scrollToNewAnswers(state) {
@@ -844,11 +860,12 @@ class RallyeApp {
     // Keep the real input mounted during heartbeats, so keyboard and caret stay put.
     if (this.currentEstSlideId !== slide.id || !document.getElementById('est-number-input')) {
       this.currentEstSlideId = slide.id;
+      this.estimationSaveError = '';
       container.innerHTML = `
         <form id="est-answer-form" class="estimate-form">
           <label for="est-number-input">Deine Schätzung</label>
           <input id="est-number-input" class="input-field estimate-input" type="text" inputmode="decimal" autocomplete="off" maxlength="16" placeholder="Zahl eingeben">
-          <small>Dezimalzahlen mit Komma oder Punkt sind möglich. Erst mit „Tipp abgeben“ wird gespeichert.</small>
+          <small>Dezimalzahlen mit Komma oder Punkt sind möglich. Gültige Zahlen werden während der Eingabe automatisch abgegeben. „Tipp abgeben“ schließt die Eingabe.</small>
           <button class="submit-btn" id="est-submit-btn" type="submit">Tipp abgeben →</button>
           <p id="est-saved-note" role="status"></p>
         </form>`;
@@ -858,13 +875,37 @@ class RallyeApp {
         const raw = document.getElementById('est-number-input').value.trim().replace(',', '.');
         if (!raw || !Number.isFinite(Number(raw))) return window.showToast('Bitte eine gültige Zahl eingeben.', true);
         this.submitEstimation(slide.id, Number(raw));
+        document.getElementById('est-number-input').blur();
+        window.restoreLiveScale?.();
       });
     }
-    document.getElementById('est-number-input').disabled = !isInteractive;
+    const input = document.getElementById('est-number-input');
+    input.oninput = () => {
+      const raw = input.value.trim().replace(',', '.');
+      this.estimationSaveError = '';
+      if (raw && Number.isFinite(Number(raw))) this.submitEstimation(slide.id, Number(raw), true);
+      else {
+        this.queuedEstimation = null;
+        this.updateEstimationNote();
+      }
+    };
+    input.onblur = () => window.restoreLiveScale?.();
+    input.disabled = !isInteractive;
     document.getElementById('est-submit-btn').disabled = !isInteractive || !!this.submissionPending;
-    document.getElementById('est-saved-note').textContent = userSubmission
-      ? `✓ Gespeichert: ${userSubmission.numeric_value}. Änderungen bitte erneut abgeben.`
-      : 'Noch kein Tipp abgegeben.';
+    this.updateEstimationNote(userSubmission);
+  }
+
+  updateEstimationNote(submission = this.state?.user_submission) {
+    const note = document.getElementById('est-saved-note');
+    const input = document.getElementById('est-number-input');
+    if (!note || !input) return;
+    const raw = input.value.trim().replace(',', '.');
+    const saved = submission ? `Zuletzt abgegeben: ${submission.numeric_value}.` : 'Noch kein Tipp abgegeben.';
+    note.textContent = this.estimationSaveError ? `${this.estimationSaveError} ${saved}`
+      : this.estimationSaving || this.queuedEstimation ? `Wird abgegeben … ${saved}`
+      : !raw || !Number.isFinite(Number(raw)) ? `Bitte eine gültige Zahl eingeben. ${saved}`
+      : submission && Number(raw) === submission.numeric_value ? `✓ Abgegeben: ${submission.numeric_value}`
+      : `Änderung noch nicht gespeichert. ${saved}`;
   }
 
   async submitMultipleChoice(slideId, optionIndex, text) {
@@ -898,40 +939,37 @@ class RallyeApp {
   }
 
   async submitEstimation(slideId, numberVal, isBackground = false) {
-    if (!Number.isFinite(numberVal) || this.submissionPending) return;
-    this.submissionPending = true;
+    if (!Number.isFinite(numberVal) || this.state?.current_slide?.id !== slideId || this.state.phase !== 3 || this.state.timer.status !== 'running') return;
+    this.queuedEstimation = { slideId, numberVal, token: this.token };
+    if (this.estimationSaving) { this.updateEstimationNote(); return; }
+    this.estimationSaving = true;
     try {
-      const res = await fetch(window.apiUrl('/api/submissions'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.token}`
-        },
-        body: JSON.stringify({
-          slide_id: slideId,
-          numeric_value: numberVal,
-          answer_text: String(numberVal)
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Antwort konnte nicht gespeichert werden.");
-      if (data.success && data.submission) {
-        this.localSubmissions[slideId] = data.submission;
-        if (this.state?.current_slide?.id !== slideId) return;
-        this.state.user_submission = data.submission;
-        
-        const submitBtn = document.getElementById('est-submit-btn');
-        if (submitBtn) {
-          submitBtn.textContent = 'Tipp aktualisieren →';
-          document.getElementById('est-saved-note').textContent = `✓ Gespeichert: ${numberVal}`;
-          window.showToast('Tipp gespeichert ✓');
+      while (this.queuedEstimation) {
+        const next = this.queuedEstimation;
+        this.queuedEstimation = null;
+        if (this.state?.current_slide?.id !== next.slideId || this.state.phase !== 3 || this.state.timer.status !== 'running' || this.token !== next.token) break;
+        this.updateEstimationNote();
+        try {
+          const res = await fetch(window.apiUrl('/api/submissions'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${next.token}` },
+            body: JSON.stringify({ slide_id: next.slideId, numeric_value: next.numberVal, answer_text: String(next.numberVal) })
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success || !data.submission) throw new Error(data.error || 'Abgabe fehlgeschlagen. Bitte erneut versuchen.');
+          if (this.token !== next.token) break;
+          this.localSubmissions[next.slideId] = data.submission;
+          if (this.state?.current_slide?.id === next.slideId && this.state.phase === 3) {
+            this.state.user_submission = data.submission;
+            this.estimationSaveError = '';
+          }
+        } catch (error) {
+          if (this.state?.current_slide?.id === next.slideId) this.estimationSaveError = error.message || 'Keine Verbindung. Bitte erneut versuchen.';
         }
       }
-    } catch (e) {
-      window.showToast(e.message || 'Keine Verbindung. Bitte erneut versuchen.', true);
     } finally {
-      this.submissionPending = false;
-      if (this.state?.current_slide?.id === slideId) this.renderQuizPhase(this.state);
+      this.estimationSaving = false;
+      this.updateEstimationNote();
     }
   }
 

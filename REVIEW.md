@@ -12,7 +12,7 @@ Die Überarbeitung wird im GitHub-Repository bereitgestellt. Ein laufender Serve
 | Kritisch | Öffentlich sichtbare Spieler-IDs dienten zugleich als Anmeldetoken; Namen konnten fremde Profile übernehmen. | Zufällige Sitzungstoken getrennt von öffentlichen IDs, Tokenprüfung auch bei WebSocket-Identifikation, auf Nutzerwunsch Wiederanmeldung in dasselbe Konto über den Namen. `server.js`, `public/js/app.js`. |
 | Hoch | Quizlösungen, Zielwerte und angeblich private Admin-Notizen wurden über Folien-API und Live-Zustand an alle ausgeliefert. | Rollenabhängige Ausgabefilter; Lösungen für Mitspieler erst bei Auflösung, private Notizen nur für gültige Admin-Sitzungen. `server.js`. |
 | Hoch | Gestoppte Timer akzeptierten weiterhin Antworten; eine verspätete Server-Zeitüberschreitung konnte die Abgabe verlängern. | Abgabe nur bei laufendem Timer, Phase 3 und nicht überschrittener Serverfrist. Wiederaufnahme der ursprünglichen Frist nach Serverneustart. `server.js`. |
-| Hoch | Schätzfragen meldeten schon beim Tippen Erfolg und speicherten Zwischenwerte; beim Ablauf wurde nochmals gesendet. | Explizite Abgabe, echte Serverbestätigung, sichtbare Fehlermeldung, normales Zahlenfeld auch für Dezimalzahlen. `public/js/app.js`. |
+| Hoch | Schätzfragen meldeten schon beim Tippen Erfolg und speicherten Zwischenwerte; beim Ablauf wurde nochmals gesendet. | Auf Nutzerwunsch automatische Abgabe gültiger Eingaben, echte Serverbestätigung, sichtbare Fehlermeldung, normales Zahlenfeld auch für Dezimalzahlen. `public/js/app.js`. |
 | Hoch | Zwei gleichnamige Upload-Routen; die tatsächlich erreichbare akzeptierte beliebige Dateiendungen. | Eine Route, Beschränkung auf Medienformate; HTML und SVG werden abgelehnt. Uploadpfad berücksichtigt `/family`. `server.js`. |
 | Mittel | HTML-Interpolation von Namen, Antworttexten und Titeln. | HTML-Escaping an relevanten Darstellungsstellen, Validierung von Farben, Medienadressen und Import-IDs. Keine pauschale Zusicherung vollständiger XSS-Freiheit. `public/js/ui.js`, `app.js`, `admin.js`, `server.js`. |
 | Mittel | Beim Löschen der aktiven Folie konnte der Zustand auf eine gelöschte ID zeigen; Import ließ alte Gesamtpunkte bestehen. | Aktive Folie/Index reparieren, Gesamtpunkte neu berechnen bzw. beim Tourimport zurücksetzen. Ausstehende Timer bei Reset/Import abbrechen. `server.js`. |
@@ -32,7 +32,7 @@ Die Überarbeitung wird im GitHub-Repository bereitgestellt. Ein laufender Serve
 - Erklärende Wartehinweise vor der Antwortfreigabe.
 - Größere Touch-Flächen, sichtbarer Tastaturfokus, Zoom-Sperre in der Livefläche auf Nutzerwunsch und Safe-Area-Abstand am unteren Bildschirmrand.
 - Zahlenfeld bleibt während Live-Aktualisierungen bestehen; Fokus und Eingabe werden nicht bei jedem Heartbeat zerstört.
-- Dezimalkomma und Dezimalpunkt werden akzeptiert. Eine Änderung ist erst nach erneuter Abgabe gespeichert.
+- Dezimalkomma und Dezimalpunkt werden akzeptiert. Gültige Änderungen werden automatisch abgegeben; Erfolg wird erst nach Serverbestätigung angezeigt.
 - Rückmeldungen für gespeicherte Antworten und fehlgeschlagene Aktionen.
 - Grundlegende Beschriftungen für Dialoge und Avatarwahl; reduzierte CSS-Bewegung bei entsprechender Systemeinstellung.
 
