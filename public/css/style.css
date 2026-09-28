@@ -1945,3 +1945,5 @@ body { min-height: 100dvh; }
   white-space: nowrap;
 }
 #active-media-player:fullscreen { object-fit: contain !important; background: #000; }
+
+#admin-prev-slide, #admin-next-slide { min-width: 0; white-space: normal; overflow-wrap: anywhere; }

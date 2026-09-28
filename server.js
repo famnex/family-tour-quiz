@@ -45,7 +45,15 @@ function playerId(req) {
   const token = req.headers.authorization?.replace('Bearer ', '') || req.cookies?.auth_token;
   return session(token)?.user_id || null;
 }
-function isAdmin(req) { return !!session(req.cookies?.admin_token, true); }
+function excludeAdminFromLeaderboard(req) {
+  const id = playerId(req);
+  if (id) db.prepare('UPDATE users SET leaderboard_excluded = 1 WHERE id = ? AND leaderboard_excluded = 0').run(id);
+}
+function isAdmin(req) {
+  const authenticated = !!session(req.cookies?.admin_token, true);
+  if (authenticated) excludeAdminFromLeaderboard(req);
+  return authenticated;
+}
 function createSession(userId, admin = false) {
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
   const token = randomBytes(32).toString('hex');
@@ -353,9 +361,11 @@ app.post('/api/admin/auth', (req, res) => {
     return res.status(401).json({ error: 'Falsches Admin-Passwort.' });
   }
   failedAdminAttempts = 0;
+  excludeAdminFromLeaderboard(req);
   const token = createSession(null, true);
   res.cookie('admin_token', token, cookieOptions(8 * 3600000));
   res.json({ success: true });
+  broadcastState();
 });
 let recoveryAttempts = 0;
 let recoveryRetryAt = 0;

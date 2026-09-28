@@ -509,6 +509,7 @@ class AdminController {
 
   updateFromState(state) {
     this.latestState = state;
+    this.syncAdminTimer(state);
     this.currentPhase = state.phase;
     this.currentSlideId = state.current_slide?.id;
 
@@ -571,17 +572,21 @@ class AdminController {
       activeBadge.textContent = `Station ${state.current_slide_index + 1} / ${state.total_slides}`;
     }
 
-    // Update Next Slide / Endauswertung button
+    const orderedSlides = [...this.allSlides].sort((a, b) => a.order_index - b.order_index);
+    const index = orderedSlides.findIndex(s => s.id === state.current_slide?.id);
+    const previous = orderedSlides[index - 1];
+    const next = orderedSlides[index + 1];
+    const prevBtn = document.getElementById('admin-prev-slide');
     const nextBtn = document.getElementById('admin-next-slide');
+    if (prevBtn) {
+      prevBtn.textContent = previous ? `◀ Vorherige Folie: ${previous.title}` : '◀ Vorherige Folie';
+      prevBtn.disabled = index <= 0;
+    }
     if (nextBtn) {
-      const isLastSlide = state.current_slide_index === (state.total_slides - 1);
-      if (isLastSlide) {
-        nextBtn.innerHTML = `🏆 Endauswertung starten ▶`;
-        nextBtn.classList.add('btn-final-ceremony');
-      } else {
-        nextBtn.innerHTML = `Nächste Folie ▶`;
-        nextBtn.classList.remove('btn-final-ceremony');
-      }
+      const isLast = state.total_slides > 0 && state.current_slide_index === state.total_slides - 1;
+      nextBtn.textContent = isLast ? '🏆 Endauswertung starten ▶' : next ? `Nächste Folie: ${next.title} ▶` : 'Nächste Folie ▶';
+      nextBtn.classList.toggle('btn-final-ceremony', isLast);
+      nextBtn.disabled = !state.total_slides;
     }
 
     // Update phase button highlights
@@ -624,6 +629,29 @@ class AdminController {
     if (tabRoute && tabRoute.classList.contains('active')) {
       this.renderRouteMap();
     }
+  }
+
+  syncAdminTimer(state) {
+    clearInterval(this.adminTimerInterval);
+    this.adminTimerSnapshot = state.timer;
+    this.adminTimerReceivedAt = performance.now();
+    this.adminTimerRemaining = state.timer?.status === 'running'
+      ? Math.max(0, (state.timer.start + state.timer.duration * 1000 - (state.server_time || Date.now())) / 1000)
+      : Math.max(0, state.timer?.remaining || 0);
+    this.updateAdminTimerDisplay();
+    if (state.phase === 3 && state.timer?.status === 'running' && this.adminTimerRemaining > 0) {
+      this.adminTimerInterval = setInterval(() => this.updateAdminTimerDisplay(), 100);
+    }
+  }
+
+  updateAdminTimerDisplay() {
+    const display = document.getElementById('admin-integrated-timer-display');
+    if (!display) return;
+    const elapsed = this.adminTimerSnapshot?.status === 'running' ? (performance.now() - this.adminTimerReceivedAt) / 1000 : 0;
+    const remaining = Math.max(0, Math.ceil(this.adminTimerRemaining - elapsed));
+    display.textContent = `⏱️ Countdown: ${remaining}s`;
+    display.style.color = remaining <= 5 ? '#ef4444' : '#fbbf24';
+    if (remaining === 0) clearInterval(this.adminTimerInterval);
   }
 
   renderAdminLiveMap(slide) {
@@ -830,13 +858,7 @@ class AdminController {
     if (timerBox && timerDisplay) {
       if (state.phase === 3) {
         timerBox.classList.remove('hidden');
-        const remaining = state.timer?.remaining ?? currentSlide.countdown_seconds ?? 20;
-        timerDisplay.textContent = `⏱️ Countdown: ${remaining}s`;
-        if (remaining <= 5) {
-          timerDisplay.style.color = '#ef4444';
-        } else {
-          timerDisplay.style.color = '#fbbf24';
-        }
+        this.updateAdminTimerDisplay();
       } else {
         timerBox.classList.add('hidden');
       }

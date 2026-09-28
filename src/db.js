@@ -177,6 +177,10 @@ function initSchema() {
     db.exec('ALTER TABLE slides ADD COLUMN show_on_route INTEGER NOT NULL DEFAULT 1 CHECK (show_on_route IN (0, 1))');
   }
 
+  if (!db.prepare('PRAGMA table_info(users)').all().some(c => c.name === 'leaderboard_excluded')) {
+    db.exec('ALTER TABLE users ADD COLUMN leaderboard_excluded INTEGER NOT NULL DEFAULT 0');
+  }
+
   // Ensure singleton row in app_state exists
   const existingState = db.prepare('SELECT id FROM app_state WHERE id = 1').get();
   if (!existingState) {

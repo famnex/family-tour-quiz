@@ -142,7 +142,7 @@ function settleSlideScores(slideId) {
 function getLeaderboard() {
   return db.prepare(`
     SELECT id, name, role, avatar_color, avatar_emoji, score, last_seen
-    FROM users WHERE role = 'player'
+    FROM users WHERE role = 'player' AND leaderboard_excluded = 0
     ORDER BY score DESC, created_at ASC
   `).all();
 }
@@ -155,7 +155,7 @@ function getSlideResults(slideId) {
     SELECT s.*, u.name as user_name, u.avatar_color, u.avatar_emoji, u.score as total_score
     FROM quiz_submissions s
     JOIN users u ON s.user_id = u.id
-    WHERE s.slide_id = ?
+    WHERE s.slide_id = ? AND u.leaderboard_excluded = 0
     ORDER BY s.final_points DESC, s.submitted_at ASC
   `).all(slideId);
 }
